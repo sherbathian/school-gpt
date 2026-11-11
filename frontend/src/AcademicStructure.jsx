@@ -1,0 +1,483 @@
+import { useEffect, useState } from 'react'
+import { apiRequest } from './api.js'
+
+async function readData(response) {
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(result.errors?.title?.[0] || result.errors?.section_ids?.[0] || result.message || 'That request could not be completed.')
+  }
+  return result.data
+}
+
+function GradeCard({ schoolId, grade, sections, canManage, onUpdated }) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(grade.title)
+  const [status, setStatus] = useState(grade.status)
+  const [selectedSections, setSelectedSections] = useState(grade.sections.map((section) => section.id))
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  function toggleSection(sectionId) {
+    setSelectedSections((current) => current.includes(sectionId)
+      ? current.filter((id) => id !== sectionId)
+      : [...current, sectionId])
+  }
+
+  async function saveGrade(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const updated = await readData(await apiRequest(`/api/schools/${schoolId}/grades/${grade.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, status, section_ids: selectedSections }),
+      }))
+      onUpdated(updated)
+      setEditing(false)
+    } catch (saveError) {
+      setError(saveError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function archiveGrade() {
+    setBusy(true)
+    setError('')
+    try {
+      await readData(await apiRequest(`/api/schools/${schoolId}/grades/${grade.id}`, { method: 'DELETE' }))
+      onUpdated({ ...grade, status: 'inactive' })
+    } catch (archiveError) {
+      setError(archiveError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <article className="academic-item">
+      <div className="academic-item-heading">
+        <div>
+          <h4>{grade.title}</h4>
+          <p>{grade.status}</p>
+        </div>
+        {canManage ? (
+          <div className="academic-actions">
+            <button className="quiet-button" type="button" onClick={() => {
+              setTitle(grade.title)
+              setStatus(grade.status)
+              setSelectedSections(grade.sections.map((section) => section.id))
+              setEditing((current) => !current)
+            }}>{editing ? 'Cancel' : 'Edit'}</button>
+            {grade.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveGrade} disabled={busy}>Archive</button> : null}
+          </div>
+        ) : null}
+      </div>
+
+      {editing ? (
+        <form className="academic-edit-form" onSubmit={saveGrade}>
+          <label htmlFor={`grade-title-${grade.id}`}>Grade title</label>
+          <input id={`grade-title-${grade.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
+          <label htmlFor={`grade-status-${grade.id}`}>Status</label>
+          <select id={`grade-status-${grade.id}`} value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <fieldset className="section-checklist">
+            <legend>Assigned sections</legend>
+            {sections.filter((section) => section.status === 'active').map((section) => (
+              <label key={section.id}>
+                <input type="checkbox" checked={selectedSections.includes(section.id)} onChange={() => toggleSection(section.id)} />
+                {section.title}
+              </label>
+            ))}
+            {sections.filter((section) => section.status === 'active').length === 0 ? <p className="muted-copy">Add an active section first.</p> : null}
+          </fieldset>
+          <button className="primary-button small-button" type="submit" disabled={busy}>Save grade</button>
+        </form>
+      ) : (
+        <p className="assigned-sections">
+          {grade.sections.length
+            ? `Sections: ${grade.sections.map((section) => section.title).join(', ')}`
+            : 'No sections assigned'}
+        </p>
+      )}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+    </article>
+  )
+}
+
+function SectionCard({ schoolId, section, canManage, onUpdated }) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(section.title)
+  const [status, setStatus] = useState(section.status)
+  const [error, setError] = useState('')
+
+  async function saveSection(event) {
+    event.preventDefault()
+    setError('')
+    try {
+      const updated = await readData(await apiRequest(`/api/schools/${schoolId}/sections/${section.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, status }),
+      }))
+      onUpdated(updated)
+      setEditing(false)
+    } catch (saveError) {
+      setError(saveError.message)
+    }
+  }
+
+  async function archiveSection() {
+    setError('')
+    try {
+      await readData(await apiRequest(`/api/schools/${schoolId}/sections/${section.id}`, { method: 'DELETE' }))
+      onUpdated({ ...section, status: 'inactive' })
+    } catch (archiveError) {
+      setError(archiveError.message)
+    }
+  }
+
+  return (
+    <li className="section-item">
+      {editing ? (
+        <form className="section-edit-form" onSubmit={saveSection}>
+          <label className="visually-hidden" htmlFor={`section-title-${section.id}`}>Section title</label>
+          <input id={`section-title-${section.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
+          <label className="visually-hidden" htmlFor={`section-status-${section.id}`}>Section status</label>
+          <select id={`section-status-${section.id}`} value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <button className="quiet-button" type="submit">Save</button>
+          <button className="quiet-button" type="button" onClick={() => setEditing(false)}>Cancel</button>
+        </form>
+      ) : (
+        <>
+          <span>{section.title}</span>
+          <span className="status-pill">{section.status}</span>
+          {canManage ? (
+            <div className="academic-actions">
+              <button className="quiet-button" type="button" onClick={() => {
+                setTitle(section.title)
+                setStatus(section.status)
+                setEditing(true)
+              }}>Edit</button>
+              {section.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveSection}>Archive</button> : null}
+            </div>
+          ) : null}
+        </>
+      )}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+    </li>
+  )
+}
+
+function SubjectCard({ schoolId, subject, grades, canManage, onUpdated }) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(subject.title)
+  const [status, setStatus] = useState(subject.status)
+  const [selectedGrades, setSelectedGrades] = useState(subject.grades.map((grade) => grade.id))
+  const [error, setError] = useState('')
+
+  function toggleGrade(gradeId) {
+    setSelectedGrades((current) => current.includes(gradeId)
+      ? current.filter((id) => id !== gradeId)
+      : [...current, gradeId])
+  }
+
+  async function saveSubject(event) {
+    event.preventDefault()
+    setError('')
+    try {
+      const updated = await readData(await apiRequest(`/api/schools/${schoolId}/subjects/${subject.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, status, grade_ids: selectedGrades }),
+      }))
+      onUpdated(updated)
+      setEditing(false)
+    } catch (saveError) {
+      setError(saveError.message)
+    }
+  }
+
+  async function archiveSubject() {
+    setError('')
+    try {
+      await readData(await apiRequest(`/api/schools/${schoolId}/subjects/${subject.id}`, { method: 'DELETE' }))
+      onUpdated({ ...subject, status: 'inactive' })
+    } catch (archiveError) {
+      setError(archiveError.message)
+    }
+  }
+
+  return (
+    <article className="academic-item">
+      <div className="academic-item-heading">
+        <div>
+          <h4>{subject.title}</h4>
+          <p>{subject.status}</p>
+        </div>
+        {canManage ? (
+          <div className="academic-actions">
+            <button className="quiet-button" type="button" onClick={() => {
+              setTitle(subject.title)
+              setStatus(subject.status)
+              setSelectedGrades(subject.grades.map((grade) => grade.id))
+              setEditing((current) => !current)
+            }}>{editing ? 'Cancel' : 'Edit'}</button>
+            {subject.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveSubject}>Archive</button> : null}
+          </div>
+        ) : null}
+      </div>
+      {editing ? (
+        <form className="academic-edit-form" onSubmit={saveSubject}>
+          <label htmlFor={`subject-title-${subject.id}`}>Subject title</label>
+          <input id={`subject-title-${subject.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
+          <label htmlFor={`subject-status-${subject.id}`}>Status</label>
+          <select id={`subject-status-${subject.id}`} value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <fieldset className="section-checklist">
+            <legend>Assigned grades</legend>
+            {grades.filter((grade) => grade.status === 'active').map((grade) => (
+              <label key={grade.id}>
+                <input type="checkbox" checked={selectedGrades.includes(grade.id)} onChange={() => toggleGrade(grade.id)} />
+                {grade.title}
+              </label>
+            ))}
+            {grades.filter((grade) => grade.status === 'active').length === 0 ? <p className="muted-copy">Add an active grade first.</p> : null}
+          </fieldset>
+          <button className="primary-button small-button" type="submit">Save subject</button>
+        </form>
+      ) : (
+        <p className="assigned-sections">
+          {subject.grades.length ? `Grades: ${subject.grades.map((grade) => grade.title).join(', ')}` : 'No grades assigned'}
+        </p>
+      )}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+    </article>
+  )
+}
+
+export default function AcademicStructure({ school, canManage }) {
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [grades, setGrades] = useState([])
+  const [sections, setSections] = useState([])
+  const [subjects, setSubjects] = useState([])
+  const [gradeTitle, setGradeTitle] = useState('')
+  const [gradeSectionIds, setGradeSectionIds] = useState([])
+  const [sectionTitle, setSectionTitle] = useState('')
+  const [subjectTitle, setSubjectTitle] = useState('')
+  const [subjectGradeIds, setSubjectGradeIds] = useState([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!open || loaded) return undefined
+    const controller = new AbortController()
+
+    async function loadStructure() {
+      setLoading(true)
+      setError('')
+      try {
+        const [gradeResponse, sectionResponse, subjectResponse] = await Promise.all([
+          apiRequest(`/api/schools/${school.id}/grades`, { signal: controller.signal }),
+          apiRequest(`/api/schools/${school.id}/sections`, { signal: controller.signal }),
+          apiRequest(`/api/schools/${school.id}/subjects`, { signal: controller.signal }),
+        ])
+        const [gradeData, sectionData, subjectData] = await Promise.all([readData(gradeResponse), readData(sectionResponse), readData(subjectResponse)])
+        setGrades(gradeData)
+        setSections(sectionData)
+        setSubjects(subjectData)
+        setLoaded(true)
+      } catch (loadError) {
+        if (!controller.signal.aborted) setError(loadError.message)
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }
+
+    loadStructure()
+    return () => controller.abort()
+  }, [open, loaded, school.id])
+
+  function updateGrade(updated) {
+    setGrades((current) => current.map((grade) => grade.id === updated.id ? updated : grade))
+  }
+
+  function updateSection(updated) {
+    setSections((current) => current.map((section) => section.id === updated.id ? updated : section))
+  }
+
+  function updateSubject(updated) {
+    setSubjects((current) => current.map((subject) => subject.id === updated.id ? updated : subject))
+  }
+
+  async function createSection(event) {
+    event.preventDefault()
+    setError('')
+    try {
+      const created = await readData(await apiRequest(`/api/schools/${school.id}/sections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: sectionTitle }),
+      }))
+      setSections((current) => [...current, created].sort((left, right) => left.title.localeCompare(right.title)))
+      setSectionTitle('')
+    } catch (createError) {
+      setError(createError.message)
+    }
+  }
+
+  function toggleGradeSection(sectionId) {
+    setGradeSectionIds((current) => current.includes(sectionId)
+      ? current.filter((id) => id !== sectionId)
+      : [...current, sectionId])
+  }
+
+  async function createGrade(event) {
+    event.preventDefault()
+    setError('')
+    try {
+      const created = await readData(await apiRequest(`/api/schools/${school.id}/grades`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: gradeTitle, section_ids: gradeSectionIds }),
+      }))
+      setGrades((current) => [...current, created].sort((left, right) => left.title.localeCompare(right.title)))
+      setGradeTitle('')
+      setGradeSectionIds([])
+    } catch (createError) {
+      setError(createError.message)
+    }
+  }
+
+  function toggleSubjectGrade(gradeId) {
+    setSubjectGradeIds((current) => current.includes(gradeId)
+      ? current.filter((id) => id !== gradeId)
+      : [...current, gradeId])
+  }
+
+  async function createSubject(event) {
+    event.preventDefault()
+    setError('')
+    try {
+      const created = await readData(await apiRequest(`/api/schools/${school.id}/subjects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: subjectTitle, grade_ids: subjectGradeIds }),
+      }))
+      setSubjects((current) => [...current, created].sort((left, right) => left.title.localeCompare(right.title)))
+      setSubjectTitle('')
+      setSubjectGradeIds([])
+    } catch (createError) {
+      setError(createError.message)
+    }
+  }
+
+  return (
+    <div className="academic-structure">
+      <button className="team-toggle" type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        {open ? 'Hide academic structure' : 'View academic structure'}
+      </button>
+      {open ? (
+        <div className="academic-panel">
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+          {loading ? <p className="muted-copy" role="status">Loading academic structure…</p> : null}
+          {!loading ? (
+            <>
+              <section aria-labelledby={`sections-heading-${school.id}`}>
+                <div className="academic-section-heading">
+                  <h4 id={`sections-heading-${school.id}`}>Sections</h4>
+                  <span>{sections.length}</span>
+                </div>
+                {canManage ? (
+                  <form className="add-academic-form" onSubmit={createSection}>
+                    <label htmlFor={`new-section-${school.id}`}>New section name</label>
+                    <input id={`new-section-${school.id}`} value={sectionTitle} onChange={(event) => setSectionTitle(event.target.value)} required />
+                    <button className="primary-button small-button" type="submit">Add section</button>
+                  </form>
+                ) : null}
+                {sections.length ? (
+                  <ul className="sections-list">
+                    {sections.map((section) => (
+                      <SectionCard key={section.id} schoolId={school.id} section={section} canManage={canManage} onUpdated={updateSection} />
+                    ))}
+                  </ul>
+                ) : <p className="muted-copy">No sections yet.</p>}
+              </section>
+
+              <section className="grades-section" aria-labelledby={`grades-heading-${school.id}`}>
+                <div className="academic-section-heading">
+                  <h4 id={`grades-heading-${school.id}`}>Grades</h4>
+                  <span>{grades.length}</span>
+                </div>
+                {canManage ? (
+                  <form className="add-grade-form" onSubmit={createGrade}>
+                    <label htmlFor={`new-grade-${school.id}`}>New grade name</label>
+                    <input id={`new-grade-${school.id}`} value={gradeTitle} onChange={(event) => setGradeTitle(event.target.value)} required />
+                    <fieldset className="section-checklist">
+                      <legend>Assign sections</legend>
+                      {sections.filter((section) => section.status === 'active').map((section) => (
+                        <label key={section.id}>
+                          <input type="checkbox" checked={gradeSectionIds.includes(section.id)} onChange={() => toggleGradeSection(section.id)} />
+                          {section.title}
+                        </label>
+                      ))}
+                      {sections.filter((section) => section.status === 'active').length === 0 ? <p className="muted-copy">Add an active section first.</p> : null}
+                    </fieldset>
+                    <button className="primary-button small-button" type="submit">Add grade</button>
+                  </form>
+                ) : null}
+                {grades.length ? (
+                  <div className="grades-list">
+                    {grades.map((grade) => (
+                      <GradeCard key={grade.id} schoolId={school.id} grade={grade} sections={sections} canManage={canManage} onUpdated={updateGrade} />
+                    ))}
+                  </div>
+                ) : <p className="muted-copy">No grades yet.</p>}
+              </section>
+
+              <section aria-labelledby={`subjects-heading-${school.id}`}>
+                <div className="academic-section-heading">
+                  <h4 id={`subjects-heading-${school.id}`}>Subjects</h4>
+                  <span>{subjects.length}</span>
+                </div>
+                {canManage ? (
+                  <form className="add-grade-form" onSubmit={createSubject}>
+                    <label htmlFor={`new-subject-${school.id}`}>New subject name</label>
+                    <input id={`new-subject-${school.id}`} value={subjectTitle} onChange={(event) => setSubjectTitle(event.target.value)} required />
+                    <fieldset className="section-checklist">
+                      <legend>Assign grades</legend>
+                      {grades.filter((grade) => grade.status === 'active').map((grade) => (
+                        <label key={grade.id}>
+                          <input type="checkbox" checked={subjectGradeIds.includes(grade.id)} onChange={() => toggleSubjectGrade(grade.id)} />
+                          {grade.title}
+                        </label>
+                      ))}
+                      {grades.filter((grade) => grade.status === 'active').length === 0 ? <p className="muted-copy">Add an active grade first.</p> : null}
+                    </fieldset>
+                    <button className="primary-button small-button" type="submit">Add subject</button>
+                  </form>
+                ) : null}
+                {subjects.length ? (
+                  <div className="grades-list">
+                    {subjects.map((subject) => (
+                      <SubjectCard key={subject.id} schoolId={school.id} subject={subject} grades={grades} canManage={canManage} onUpdated={updateSubject} />
+                    ))}
+                  </div>
+                ) : <p className="muted-copy">No subjects yet.</p>}
+              </section>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}

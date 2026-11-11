@@ -1,12 +1,17 @@
 # school-gpt
 
-School management application built as a Laravel REST API and a separate React frontend.
+School management app built as a Laravel REST API and a separate React frontend.
 
-## Current milestone: project setup
+## Progress
 
-The Laravel 13 API lives in `backend/`; the React 19 app lives in `frontend/`. The React dev server proxies `/api` requests to Laravel. SQLite is configured for local development so the first slice works without a running MySQL server.
+- [x] Project setup, health check, SQLite connection, and React page
+- [x] Cookie sign-in, role membership, school access checks
+- [x] Schools and school user management
+- [x] Academic structure: school-specific grades, sections, subjects, and their assignments
 
-### Install dependencies once
+## Setup once
+
+The Laravel 13 API is in `backend/`; the React 19 app is in `frontend/`. SQLite keeps local development independent of a running MySQL server. The React dev server proxies API and CSRF-cookie requests to Laravel.
 
 ```sh
 cd backend
@@ -15,38 +20,38 @@ cp .env.example .env
 php artisan key:generate
 touch database/database.sqlite
 php artisan migrate
-
-cd ../frontend
-npm install
+php artisan school:create-super-admin
 ```
 
-### Run the API
+The console command asks for an email, name, and password without echoing the password. It creates a global admin; public self-registration is disabled.
+To provision an ordinary teacher or school-admin account for later assignment, run `php artisan school:create-user`. It creates the account without granting any role or school access.
+
+In another terminal:
+
+```sh
+cd frontend
+npm install
+npm run dev
+```
+
+And start the API in a separate terminal:
 
 ```sh
 cd backend
 php artisan serve
 ```
 
-The health endpoint is [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health). It returns `status: ok` when the configured database can be reached.
+Open the Vite URL. Sign in with the global administrator credentials you created. The health endpoint is [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health).
 
-### Run the frontend
-
-In another terminal:
+## Verify
 
 ```sh
-cd frontend
-npm run dev
+(cd backend && php artisan test)
+(cd frontend && npm test)
+(cd frontend && npm run build)
+(cd frontend && npm run lint)
 ```
 
-Open the URL printed by Vite. The page shows whether the API and database are connected.
+Backend tests cover login/logout, school CRUD and archiving, school-member management, role restrictions, tenant isolation, account provisioning, and the database health endpoint. React tests cover sign-in, school creation, and adding a member to a school.
 
-### Verify this milestone
-
-```sh
-cd backend && php artisan test
-cd frontend && npm test
-cd frontend && npm run build
-```
-
-The backend feature test checks the health response against an in-memory SQLite database. The React tests cover the connected and API-unavailable states. The build checks that Vite can compile the frontend for production.
-# school-gpt
+School admins can add grades and sections from a school card's academic structure panel, assign active sections to each grade, then add subjects and assign them to active grades. Teachers can view the structure. No default academic names are seeded because each school defines its own structure.

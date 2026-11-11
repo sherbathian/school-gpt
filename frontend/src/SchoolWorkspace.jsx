@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
 import AcademicStructure from './AcademicStructure.jsx'
+import StudentRoster from './StudentRoster.jsx'
+import FeeManagement from './FeeManagement.jsx'
+import SchoolSessions from './SchoolSessions.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -12,6 +15,7 @@ async function readData(response) {
 
 function SchoolCard({ school, user, onUpdated, onArchived }) {
   const canManageUsers = user.is_super_admin || school.role === 'school_admin'
+  const canTakeAttendance = user.is_super_admin || ['school_admin', 'teacher'].includes(school.role)
   const [editing, setEditing] = useState(false)
   const [teamOpen, setTeamOpen] = useState(false)
   const [members, setMembers] = useState([])
@@ -201,6 +205,9 @@ function SchoolCard({ school, user, onUpdated, onArchived }) {
       ) : null}
 
       <AcademicStructure school={school} canManage={canManageUsers} />
+      <SchoolSessions school={school} canManage={canManageUsers} />
+      <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} />
+      {canManageUsers ? <FeeManagement school={school} /> : null}
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
     </article>

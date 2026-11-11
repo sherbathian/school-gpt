@@ -35,4 +35,24 @@ class School extends Model
     {
         return $this->hasMany(Subject::class);
     }
+
+    public function students(): HasMany
+    {
+        return $this->hasMany(Student::class);
+    }
+
+    public function feeTypes(): HasMany
+    {
+        return $this->hasMany(FeeType::class);
+    }
+
+    public function feeInvoices(): HasMany
+    {
+        return $this->hasMany(FeeInvoice::class);
+    }
+
+    public function schoolSessions(): HasMany
+    {
+        return $this->hasMany(SchoolSession::class);
+    }
 }

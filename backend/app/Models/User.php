@@ -56,4 +56,12 @@ class User extends Authenticatable
             ->wherePivot('role', 'school_admin')
             ->exists();
     }
+
+    public function canRecordAttendance(School $school): bool
+    {
+        return $this->isSuperAdmin() || $this->activeSchools()
+            ->whereKey($school->getKey())
+            ->wherePivotIn('role', ['school_admin', 'teacher'])
+            ->exists();
+    }
 }

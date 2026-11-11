@@ -27,6 +27,11 @@ class SchoolPolicy
         return $user->canManageSchool($school);
     }
 
+    public function recordAttendance(User $user, School $school): bool
+    {
+        return $user->canRecordAttendance($school);
+    }
+
     public function update(User $user, School $school): bool
     {
         return $user->isSuperAdmin();

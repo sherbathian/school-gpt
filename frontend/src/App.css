@@ -561,6 +561,7 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
 .student-profile-page .student-fee-history { margin-top: 16px; }
 .student-profile-page a { color: #5267d5; font-weight: 650; text-decoration: none; }
 .student-profile-page a:hover { text-decoration: underline; }
+.student-file-links { display: inline-flex; flex-wrap: wrap; gap: 12px; }
 .student-edit-panel { display: grid; gap: 16px; }
 .student-edit-panel fieldset { min-width: 0; margin: 0; padding: 16px; border: 1px solid #e8ebf2; border-radius: 9px; }
 .student-edit-panel legend { padding: 0 6px; color: #5368d8; font-size: 13px; font-weight: 700; }

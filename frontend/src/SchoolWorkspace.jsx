@@ -239,6 +239,9 @@ export default function SchoolWorkspace({ user, onLogout }) {
   const [busy, setBusy] = useState(false)
   const [activeModule, setActiveModule] = useState('overview')
   const [selectedSchoolId, setSelectedSchoolId] = useState('')
+  const [sidebarSessions, setSidebarSessions] = useState([])
+  const [sessionBusy, setSessionBusy] = useState(false)
+  const [sessionError, setSessionError] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -261,6 +264,22 @@ export default function SchoolWorkspace({ user, onLogout }) {
   const activeSchoolId = schools.some((school) => String(school.id) === selectedSchoolId)
     ? selectedSchoolId
     : String(schools[0]?.id || '')
+
+  useEffect(() => {
+    if (!activeSchoolId) {
+      setSidebarSessions([])
+      return undefined
+    }
+    const controller = new AbortController()
+    setSessionError('')
+    apiRequest(`/api/schools/${activeSchoolId}/sessions`, { signal: controller.signal })
+      .then(readData)
+      .then(setSidebarSessions)
+      .catch((requestError) => {
+        if (!controller.signal.aborted) setSessionError(requestError.message)
+      })
+    return () => controller.abort()
+  }, [activeSchoolId])
 
   async function createSchool(event) {
     event.preventDefault()
@@ -303,6 +322,33 @@ export default function SchoolWorkspace({ user, onLogout }) {
     } : school))
   }
 
+  function applyCurrentSession(schoolId, session) {
+    setSidebarSessions((current) => [
+      session,
+      ...current.filter((item) => item.id !== session.id).map((item) => ({ ...item, is_current: false, current_marker: null })),
+    ])
+    updateActiveSession(schoolId, session)
+  }
+
+  async function changeActiveSession(event) {
+    const sessionId = event.target.value
+    if (!sessionId || !activeSchoolId || !canManageSchool) return
+    setSessionBusy(true)
+    setSessionError('')
+    try {
+      const updated = await readData(await apiRequest(`/api/schools/${activeSchoolId}/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_current: true }),
+      }))
+      applyCurrentSession(activeSchoolId, updated)
+    } catch (requestError) {
+      setSessionError(requestError.message)
+    } finally {
+      setSessionBusy(false)
+    }
+  }
+
   const activeSchool = schools.find((school) => String(school.id) === activeSchoolId)
   const canManageSchool = user.is_super_admin || activeSchool?.role === 'school_admin'
   const navGroups = [
@@ -325,6 +371,15 @@ export default function SchoolWorkspace({ user, onLogout }) {
     <section className="account-layout dashboard-layout" aria-labelledby="account-title">
       <aside className="dashboard-sidebar" aria-label="School management navigation">
         <a className="dashboard-brand" href="#account-title"><span className="dashboard-brand-mark">S</span><span>Schoolhouse<small>ADMIN CONSOLE</small></span></a>
+        {activeSchool ? <div className="sidebar-session-switcher">
+          <span className="sidebar-session-caption">Current session</span>
+          {canManageSchool ? <select aria-label="Current session" value={activeSchool.active_session?.id || ''} onChange={changeActiveSession} disabled={sessionBusy || sidebarSessions.length === 0}>
+            {!activeSchool.active_session ? <option value="">No active session</option> : null}
+            {sidebarSessions.filter((session) => session.status === 'active').map((session) => <option key={session.id} value={session.id}>{session.title}</option>)}
+          </select> : <strong>{activeSchool.active_session?.title || 'No active session'}</strong>}
+          {activeSchool.active_session?.academic_year ? <small>{activeSchool.active_session.academic_year}</small> : null}
+          {sessionError ? <small className="sidebar-session-error" role="alert">{sessionError}</small> : null}
+        </div> : null}
         <p className="sidebar-label">WORKSPACE</p>
         <nav className="dashboard-nav" aria-label="Workspace pages">
           {navGroups.map((group) => <div className="dashboard-nav-group" key={group.title}>
@@ -406,7 +461,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
       </div> : null}
       {activeModule !== 'overview' && activeModule !== 'schools' ? (
         schools.find((school) => String(school.id) === activeSchoolId)
-          ? <div className="active-module-page"><SchoolCard key={`${activeSchoolId}-${activeModule}`} school={schools.find((school) => String(school.id) === activeSchoolId)} user={user} onUpdated={updateSchool} onActiveSessionChange={(session) => updateActiveSession(activeSchoolId, session)} onArchived={(id) => { setSchools((current) => current.filter((item) => item.id !== id)); setActiveModule('schools') }} onNavigate={setActiveModule} activeModule={activeModule} /></div>
+          ? <div className="active-module-page"><SchoolCard key={`${activeSchoolId}-${activeModule}-${activeSchool?.active_session?.id || 'no-session'}`} school={schools.find((school) => String(school.id) === activeSchoolId)} user={user} onUpdated={updateSchool} onActiveSessionChange={(session) => applyCurrentSession(activeSchoolId, session)} onArchived={(id) => { setSchools((current) => current.filter((item) => item.id !== id)); setActiveModule('schools') }} onNavigate={setActiveModule} activeModule={activeModule} /></div>
           : <p className="empty-memberships">{loading ? 'Loading schools…' : 'Add or select a school to open this module.'}</p>
       ) : null}
       </div>

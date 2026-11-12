@@ -39,4 +39,9 @@ class Student extends Model
     {
         return $this->hasMany(FeeInvoice::class);
     }
+
+    public function feeCharges(): HasMany
+    {
+        return $this->hasMany(StudentFeeCharge::class);
+    }
 }

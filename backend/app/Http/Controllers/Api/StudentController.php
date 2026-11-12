@@ -4,14 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Enrollment;
+use App\Models\FeeInvoice;
 use App\Models\School;
 use App\Models\Student;
+use App\Models\StudentFeeCharge;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -24,7 +27,7 @@ class StudentController extends Controller
             'academic_year' => ['sometimes', 'string', 'regex:/^\d{4}-\d{4}$/', 'max:20'],
         ]);
         $studentsQuery = $schoolRecord->students()
-            ->with('enrollments.grade:id,title', 'enrollments.section:id,title')
+            ->with('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title')
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -82,15 +85,19 @@ class StudentController extends Controller
             return $schoolRecord->students()->create($validated);
         });
 
-        return response()->json(['data' => $this->studentData($student->load('enrollments.grade:id,title', 'enrollments.section:id,title'))], 201);
+        return response()->json(['data' => $this->studentData($student->load('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title'))], 201);
     }
 
     public function show(Request $request, int $school, int $student): JsonResponse
     {
         $schoolRecord = $this->accessibleSchool($request, $school, 'view');
-        $studentRecord = $schoolRecord->students()->with('enrollments.grade:id,title', 'enrollments.section:id,title')->findOrFail($student);
+        $studentRecord = $schoolRecord->students()->with('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title')->findOrFail($student);
+        $data = $this->studentData($studentRecord);
+        if (Gate::allows('manage', $schoolRecord)) {
+            $data['fee_history'] = $this->feeHistory($studentRecord);
+        }
 
-        return response()->json(['data' => $this->studentData($studentRecord)]);
+        return response()->json(['data' => $data]);
     }
 
     public function update(Request $request, int $school, int $student): JsonResponse
@@ -108,16 +115,29 @@ class StudentController extends Controller
             'b_form_number' => ['sometimes', 'nullable', 'string', 'max:15', Rule::unique('students', 'b_form_number')->where(fn (Builder $query) => $query->where('school_id', $schoolRecord->id))->ignore($studentRecord->id)],
             'previous_school_details' => ['sometimes', 'nullable', 'string'], 'note' => ['sometimes', 'nullable', 'string'],
             'photo' => ['sometimes', 'nullable', 'image', 'max:5120'], 'b_form_document' => ['sometimes', 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'remove_photo' => ['sometimes', 'boolean'], 'remove_b_form_document' => ['sometimes', 'boolean'],
             'guardian' => ['sometimes', 'array'],
+            'guardian.father_name' => ['nullable', 'string', 'max:255'], 'guardian.father_phone' => ['nullable', 'string', 'max:50'], 'guardian.father_occupation' => ['nullable', 'string', 'max:255'], 'guardian.father_cnic' => ['nullable', 'string', 'max:30'],
+            'guardian.mother_name' => ['nullable', 'string', 'max:255'], 'guardian.mother_phone' => ['nullable', 'string', 'max:50'], 'guardian.mother_occupation' => ['nullable', 'string', 'max:255'], 'guardian.mother_cnic' => ['nullable', 'string', 'max:30'],
+            'guardian.is_guardian_other' => ['nullable', 'boolean'], 'guardian.guardian_name' => ['nullable', 'string', 'max:255'], 'guardian.guardian_relation' => ['nullable', 'string', 'max:100'], 'guardian.guardian_email' => ['nullable', 'email', 'max:255'], 'guardian.guardian_phone' => ['nullable', 'string', 'max:50'], 'guardian.guardian_occupation' => ['nullable', 'string', 'max:255'], 'guardian.guardian_cnic' => ['nullable', 'string', 'max:30'], 'guardian.guardian_address' => ['nullable', 'string'],
         ]);
         $photo = $validated['photo'] ?? null;
         $bFormDocument = $validated['b_form_document'] ?? null;
+        $removePhoto = (bool) ($validated['remove_photo'] ?? false);
+        $removeBFormDocument = (bool) ($validated['remove_b_form_document'] ?? false);
         unset($validated['photo'], $validated['b_form_document']);
-        if ($photo) {
-            $validated['photo_path'] = $photo->store("students/{$schoolRecord->id}/photos", 'local');
+        unset($validated['remove_photo'], $validated['remove_b_form_document']);
+        if ($photo || $removePhoto) {
+            if ($studentRecord->photo_path) {
+                Storage::disk('local')->delete($studentRecord->photo_path);
+            }
+            $validated['photo_path'] = $photo ? $photo->store("students/{$schoolRecord->id}/photos", 'local') : null;
         }
-        if ($bFormDocument) {
-            $validated['b_form_document_path'] = $bFormDocument->store("students/{$schoolRecord->id}/documents", 'local');
+        if ($bFormDocument || $removeBFormDocument) {
+            if ($studentRecord->b_form_document_path) {
+                Storage::disk('local')->delete($studentRecord->b_form_document_path);
+            }
+            $validated['b_form_document_path'] = $bFormDocument ? $bFormDocument->store("students/{$schoolRecord->id}/documents", 'local') : null;
         }
         if (isset($validated['guardian'])) {
             $guardian = $validated['guardian'];
@@ -130,7 +150,7 @@ class StudentController extends Controller
         }
         $studentRecord->update($validated);
 
-        return response()->json(['data' => $this->studentData($studentRecord->load('enrollments.grade:id,title', 'enrollments.section:id,title'))]);
+        return response()->json(['data' => $this->studentData($studentRecord->load('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title'))]);
     }
 
     public function destroy(Request $request, int $school, int $student): JsonResponse
@@ -244,6 +264,62 @@ class StudentController extends Controller
             'current_enrollment' => $currentEnrollment ? $this->enrollmentData($currentEnrollment) : null,
             'enrollments' => $enrollments->map(fn (Enrollment $enrollment) => $this->enrollmentData($enrollment))->all(),
         ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function feeHistory(Student $student): array
+    {
+        $invoices = $student->feeInvoices()
+            ->with(['feeType:id,title', 'payments'])
+            ->orderByDesc('academic_year')->orderByDesc('id')->get()
+            ->map(function (FeeInvoice $invoice): array {
+                $paidCents = (int) $invoice->payments->sum('amount_cents');
+                $balanceCents = max(0, $invoice->amount_cents - $paidCents);
+                $status = match (true) {
+                    $invoice->status === 'void' => 'void',
+                    $balanceCents === 0 => 'paid',
+                    $paidCents > 0 => 'partial',
+                    $invoice->due_date?->lt(today()) => 'overdue',
+                    default => 'open',
+                };
+
+                return [
+                    'id' => $invoice->id,
+                    'kind' => 'invoice',
+                    'fee_type' => $invoice->description ?: $invoice->feeType?->title,
+                    'academic_year' => $invoice->academic_year,
+                    'billing_month' => null,
+                    'due_date' => $invoice->due_date?->toDateString(),
+                    'amount' => number_format($invoice->amount_cents / 100, 2, '.', ''),
+                    'amount_paid' => number_format($paidCents / 100, 2, '.', ''),
+                    'balance' => number_format($balanceCents / 100, 2, '.', ''),
+                    'status' => $status,
+                    'payments' => $invoice->payments->map(fn ($payment): array => [
+                        'amount' => number_format($payment->amount_cents / 100, 2, '.', ''),
+                        'paid_on' => $payment->paid_on->toDateString(),
+                        'reference' => $payment->reference,
+                    ])->values()->all(),
+                ];
+            });
+
+        $monthlyCharges = $student->feeCharges()
+            ->with(['feeMaster.feeType:id,title', 'schoolSession:id,starts_on,ends_on'])
+            ->orderByDesc('billing_month')->orderByDesc('id')->get()
+            ->map(fn (StudentFeeCharge $charge): array => [
+                'id' => $charge->id,
+                'kind' => 'monthly',
+                'fee_type' => $charge->feeMaster?->feeType?->title ?? 'Monthly fee',
+                'academic_year' => $charge->schoolSession?->starts_on?->format('Y').'-'.$charge->schoolSession?->ends_on?->format('Y'),
+                'billing_month' => $charge->billing_month,
+                'due_date' => $charge->due_date->toDateString(),
+                'amount' => $charge->amount,
+                'amount_paid' => $charge->status === 'paid' ? $charge->amount : null,
+                'balance' => $charge->status === 'paid' ? '0.00' : $charge->amount,
+                'status' => $charge->status,
+                'payments' => [],
+            ]);
+
+        return $invoices->concat($monthlyCharges)->sortByDesc(fn (array $fee): string => $fee['billing_month'] ?? $fee['academic_year'])->values()->all();
     }
 
     /** @return array<string, mixed> */

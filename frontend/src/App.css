@@ -515,3 +515,78 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
   .fee-payment-form input:first-of-type, .fee-payment-form input:nth-of-type(2) { width: 100%; flex: 1 1 100%; }
   .student-row { align-items: flex-start; }
 }
+
+/* Academic session selector in the desktop navigation rail */
+.sidebar-session-switcher { margin: 25px 2px 3px; padding: 12px; display: grid; gap: 7px; border: 1px solid #e8eafb; border-radius: 10px; background: linear-gradient(135deg, #f8f9ff, #fff); }
+.sidebar-session-caption { color: #858ea5; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.sidebar-session-switcher select { width: 100%; min-width: 0; height: 38px; padding: 0 9px; border: 1px solid #dfe4f0; border-radius: 7px; background: #fff; color: #3c4864; font: inherit; font-size: 13px; font-weight: 650; }
+.sidebar-session-switcher > strong { color: #35415c; font-size: 14px; }
+.sidebar-session-switcher > small { color: #6676d7; font-size: 12px; font-weight: 700; }
+.sidebar-session-switcher .sidebar-session-error { color: #a44e43; font-size: 11px; line-height: 1.4; }
+
+/* Consistent readable scale for each completed school workspace module */
+.active-module-page .academic-section-heading h4,
+.active-module-page .directory-heading h4 { font-size: 19px; letter-spacing: -.02em; }
+.active-module-page .crud-table { font-size: 14px; }
+.active-module-page .crud-table th { padding: 13px 15px; font-size: 11px; }
+.active-module-page .crud-table td { padding: 13px 15px; }
+.active-module-page .crud-table td small { font-size: 12px; }
+.active-module-page .academic-panel,
+.active-module-page .fee-panel { box-shadow: 0 6px 22px rgba(37, 48, 75, .035); }
+.active-module-page input:not([type="checkbox"]):not([type="file"]),
+.active-module-page select,
+.active-module-page textarea { font-size: 14px; }
+.active-module-page label { line-height: 1.4; }
+.active-module-page .quiet-button { font-size: 13px; }
+.active-module-page .data-tools-actions { min-height: 38px; }
+.active-module-page .data-tools-message { font-size: 13px; }
+
+/* Student directory, full profile editor, details and fee history */
+.student-roster-table { min-width: 900px; table-layout: fixed; }
+.student-roster-table .student-column { width: 25%; }
+.student-roster-table .contact-column { width: 23%; }
+.student-roster-table .enrollment-column { width: 25%; }
+.student-roster-table .actions-column { width: 27%; }
+.student-roster-table td strong { color: #35415c; font-size: 14px; }
+.student-roster-table td:last-child { white-space: normal; }
+.student-roster-table .academic-actions { flex-wrap: wrap; gap: 7px 13px; }
+.student-expanded-row > td { padding: 0 !important; background: #f8f9fd; }
+.student-edit-panel, .student-detail-panel { margin: 14px; padding: 20px; border: 1px solid #e7eaf2; border-radius: 11px; background: #fff; box-shadow: 0 4px 16px rgba(45, 57, 88, .035); }
+.student-edit-panel { display: grid; gap: 16px; }
+.student-edit-panel fieldset { min-width: 0; margin: 0; padding: 16px; border: 1px solid #e8ebf2; border-radius: 9px; }
+.student-edit-panel legend { padding: 0 6px; color: #5368d8; font-size: 13px; font-weight: 700; }
+.student-edit-panel .student-form-grid input[type="file"] { min-width: 0; max-width: 100%; font-size: 12px; }
+.student-file-remove { display: flex; align-items: center; gap: 7px; margin-top: 5px; color: #7c879d; font-size: 11px; font-weight: 500; }
+.student-file-remove input { min-height: 0; accent-color: #586bd6; }
+.student-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+.student-detail-grid > section, .student-fee-history { min-width: 0; padding: 16px; border: 1px solid #edf0f5; border-radius: 9px; background: #fbfcff; }
+.student-detail-grid h5, .student-fee-history h5 { margin: 0 0 12px; color: #35415c; font-size: 14px; }
+.student-detail-grid dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.student-detail-grid dl > div { min-width: 0; }
+.student-detail-grid dt { color: #858ea3; font-size: 11px; font-weight: 700; }
+.student-detail-grid dd { margin: 3px 0 0; overflow-wrap: anywhere; color: #45516c; font-size: 13px; }
+.student-enrollment-history, .student-fee-history { grid-column: 1 / -1; }
+.student-history-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; }
+.student-history-list > div { padding: 10px 12px; border: 1px solid #e8ebf2; border-radius: 7px; background: #fff; }
+.student-history-list strong, .student-history-list span { display: block; }
+.student-history-list strong { color: #45516c; font-size: 13px; }
+.student-history-list span { margin-top: 4px; color: #858ea3; font-size: 12px; }
+.student-fee-history { margin-top: 16px; }
+.student-fee-history .crud-table-wrap { margin-bottom: 0; }
+.fee-status { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; background: #eef0f8; color: #59647e; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.fee-status-paid { background: #e8f6ee; color: #31805b; }
+.fee-status-overdue, .fee-status-void { background: #fff0ed; color: #a94f43; }
+.fee-status-partial { background: #fff5e8; color: #9b6a2f; }
+@media (max-width: 850px) {
+  .student-roster-table { min-width: 820px; }
+  .student-detail-grid { grid-template-columns: 1fr; }
+  .student-enrollment-history, .student-fee-history { grid-column: auto; }
+}
+@media (max-width: 650px) {
+  .sidebar-session-switcher { margin: 10px 0 0; padding: 9px 11px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .sidebar-session-caption { grid-column: 1 / -1; }
+  .sidebar-session-switcher select { height: 36px; }
+  .student-edit-panel, .student-detail-panel { margin: 9px; padding: 14px; }
+  .student-detail-grid dl { grid-template-columns: 1fr; }
+  .student-form-actions { flex-wrap: wrap; }
+}

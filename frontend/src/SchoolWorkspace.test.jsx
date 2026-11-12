@@ -248,10 +248,10 @@ describe('school workspace', () => {
     let invoices = []
     vi.stubGlobal('fetch', vi.fn(async (path, options = {}) => {
       if (path === '/api/schools') return { ok: true, json: async () => ({ data: [school] }) }
-      if (path === `/api/schools/2/fee-types?academic_year=${academicYear}` && !options.method) return { ok: true, json: async () => ({ data: feeTypes }) }
+      if (path === `/api/schools/2/legacy-fee-types?academic_year=${academicYear}` && !options.method) return { ok: true, json: async () => ({ data: feeTypes }) }
       if (path === `/api/schools/2/fee-invoices?academic_year=${academicYear}` && !options.method) return { ok: true, json: async () => ({ data: invoices }) }
       if (path === `/api/schools/2/students?academic_year=${academicYear}` && !options.method) return { ok: true, json: async () => ({ data: [student] }) }
-      if (path === '/api/schools/2/fee-types' && options.method === 'POST') {
+      if (path === '/api/schools/2/legacy-fee-types' && options.method === 'POST') {
         const values = JSON.parse(options.body)
         feeTypes = [{ id: 5, ...values, amount: values.amount, status: 'active' }]
         return { ok: true, json: async () => ({ data: feeTypes[0] }) }

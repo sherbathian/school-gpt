@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
+import DataTools from './DataTools.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -7,13 +8,17 @@ async function readData(response) {
   return result.data
 }
 
-export default function SchoolSessions({ school, canManage }) {
+export default function SchoolSessions({ school, canManage, onCurrentChange }) {
   const [sessions, setSessions] = useState([])
   const [title, setTitle] = useState('')
   const [startsOn, setStartsOn] = useState('')
   const [endsOn, setEndsOn] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({ title: '', starts_on: '', ends_on: '' })
+  const [search, setSearch] = useState('')
+  const visibleSessions = sessions.filter((session) => `${session.title} ${session.starts_on} ${session.ends_on} ${session.status}`.toLowerCase().includes(search.toLowerCase()))
 
   useEffect(() => {
     let active = true
@@ -36,6 +41,7 @@ export default function SchoolSessions({ school, canManage }) {
       setSessions((current) => [...current.map((item) => session.is_current
         ? { ...item, is_current: false, current_marker: null }
         : item), session].sort((left, right) => right.starts_on.localeCompare(left.starts_on)))
+      if (session.is_current) onCurrentChange?.(session)
       setTitle('')
       setStartsOn('')
       setEndsOn('')
@@ -46,6 +52,14 @@ export default function SchoolSessions({ school, canManage }) {
     }
   }
 
+  async function importSession(row) {
+    const session = await readData(await apiRequest(`/api/schools/${school.id}/sessions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: row.title, starts_on: row.starts_on, ends_on: row.ends_on }),
+    }))
+    setSessions((current) => [...current, session].sort((left, right) => right.starts_on.localeCompare(left.starts_on)))
+  }
+
   async function makeCurrent(session) {
     setError('')
     try {
@@ -53,8 +67,32 @@ export default function SchoolSessions({ school, canManage }) {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_current: true }),
       }))
       setSessions((current) => current.map((item) => item.id === updated.id ? updated : { ...item, is_current: false, current_marker: null }))
+      onCurrentChange?.(updated)
     } catch (requestError) {
       setError(requestError.message)
+    }
+  }
+
+  function startEditing(session) {
+    setEditingId(session.id)
+    setEditForm({ title: session.title, starts_on: session.starts_on, ends_on: session.ends_on })
+  }
+
+  async function saveSession(event, session) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const updated = await readData(await apiRequest(`/api/schools/${school.id}/sessions/${session.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editForm),
+      }))
+      setSessions((current) => current.map((item) => item.id === updated.id ? updated : item).sort((left, right) => right.starts_on.localeCompare(left.starts_on)))
+      if (updated.is_current) onCurrentChange?.(updated)
+      setEditingId(null)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -64,17 +102,29 @@ export default function SchoolSessions({ school, canManage }) {
         <h4 id={`sessions-title-${school.id}`}>School sessions</h4>
         <span>{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}</span>
       </div>
+      <DataTools title="School sessions" rows={sessions} fields={[{ key: 'title', label: 'title', required: true }, { key: 'starts_on', label: 'starts_on', required: true }, { key: 'ends_on', label: 'ends_on', required: true }, { key: 'status', label: 'status' }, { key: 'is_current', label: 'is_current' }]} canImport={canManage} onImport={importSession} />
       {error ? <p className="form-error" role="alert">{error}</p> : null}
+      <label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search academic years" placeholder="Search academic years" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
       {sessions.length ? (
-        <ul className="team-list">
-          {sessions.map((session) => (
-            <li key={session.id}>
-              <div className="team-person"><strong>{session.title}</strong><span>{session.starts_on} to {session.ends_on}</span></div>
-              {session.is_current ? <span className="role-pill">Current</span> : canManage ? <button className="quiet-button" type="button" onClick={() => makeCurrent(session)}>Make current</button> : null}
-              <span className="role-pill">{session.status}</span>
-            </li>
+        <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Session</th><th>Date range</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+          {visibleSessions.map((session) => (
+            <Fragment key={session.id}>
+              <tr>
+                <td>{session.title}{session.is_current ? <small>Active academic year</small> : null}</td>
+                <td>{session.starts_on} – {session.ends_on}</td>
+                <td>{session.status}</td>
+                <td>{!session.is_current && canManage ? <button className="quiet-button" type="button" onClick={() => makeCurrent(session)}>Make current</button> : null}{canManage ? <button className="quiet-button" type="button" onClick={() => startEditing(session)}>Edit</button> : null}</td>
+              </tr>
+              {editingId === session.id ? <tr><td colSpan="4"><form className="session-edit-form" onSubmit={(event) => saveSession(event, session)}>
+                <label>Session title<input value={editForm.title} onChange={(event) => setEditForm((current) => ({ ...current, title: event.target.value }))} maxLength="100" required /></label>
+                <label>Start date<input type="date" value={editForm.starts_on} onChange={(event) => setEditForm((current) => ({ ...current, starts_on: event.target.value }))} required /></label>
+                <label>End date<input type="date" value={editForm.ends_on} min={editForm.starts_on || undefined} onChange={(event) => setEditForm((current) => ({ ...current, ends_on: event.target.value }))} required /></label>
+                <button className="primary-button small-button" type="submit" disabled={busy}>Save session</button>
+                <button className="quiet-button" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+              </form></td></tr> : null}
+            </Fragment>
           ))}
-        </ul>
+        </tbody></table></div>
       ) : <p className="muted-copy">No school sessions have been added.</p>}
       {canManage ? (
         <form className="add-member-form" onSubmit={createSession}>

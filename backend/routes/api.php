@@ -1,11 +1,17 @@
 <?php
 
 use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\FeeDiscountController;
+use App\Http\Controllers\Api\FeeGroupController;
 use App\Http\Controllers\Api\FeeInvoiceController;
+use App\Http\Controllers\Api\FeeMasterController;
 use App\Http\Controllers\Api\FeeTypeController;
 use App\Http\Controllers\Api\GradeController;
-use App\Http\Controllers\Api\SectionController;
+use App\Http\Controllers\Api\LegacyFeeTypeController;
 use App\Http\Controllers\Api\SchoolSessionController;
+use App\Http\Controllers\Api\SectionController;
+use App\Http\Controllers\Api\StaffController;
+use App\Http\Controllers\Api\StaffLookupController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\SubjectController;
 use App\Http\Controllers\AuthController;
@@ -32,6 +38,24 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/schools/{school}/users/{user}', [SchoolUserController::class, 'destroy']);
     Route::apiResource('schools.grades', GradeController::class);
     Route::apiResource('schools.sessions', SchoolSessionController::class);
+    Route::apiResource('schools.fee-discounts', FeeDiscountController::class);
+    Route::apiResource('schools.fee-groups', FeeGroupController::class);
+    Route::get('schools/{school}/fee-masters/{feeMaster}/assignments', [FeeMasterController::class, 'assignments']);
+    Route::post('schools/{school}/fee-masters/{feeMaster}/assignments', [FeeMasterController::class, 'assignStudents']);
+    Route::apiResource('schools.fee-masters', FeeMasterController::class);
+    Route::get('/schools/{school}/staff-lookups/{lookupType}', [StaffLookupController::class, 'index']);
+    Route::post('/schools/{school}/staff-lookups/{lookupType}', [StaffLookupController::class, 'store']);
+    Route::patch('/schools/{school}/staff-lookups/{lookupType}/{lookup}', [StaffLookupController::class, 'update']);
+    Route::delete('/schools/{school}/staff-lookups/{lookupType}/{lookup}', [StaffLookupController::class, 'destroy']);
+    Route::get('/schools/{school}/staff', [StaffController::class, 'index']);
+    Route::post('/schools/{school}/staff', [StaffController::class, 'store']);
+    Route::get('/schools/{school}/staff/{staff}', [StaffController::class, 'show']);
+    Route::patch('/schools/{school}/staff/{staff}', [StaffController::class, 'update']);
+    Route::delete('/schools/{school}/staff/{staff}', [StaffController::class, 'destroy']);
+    Route::get('/schools/{school}/staff/{staff}/leave-balances', [StaffController::class, 'leaveBalances']);
+    Route::post('/schools/{school}/staff/{staff}/leave-balances', [StaffController::class, 'storeLeaveBalance']);
+    Route::patch('/schools/{school}/staff/{staff}/leave-balances/{balance}', [StaffController::class, 'updateLeaveBalance']);
+    Route::delete('/schools/{school}/staff/{staff}/leave-balances/{balance}', [StaffController::class, 'destroyLeaveBalance']);
     Route::put('/schools/{school}/grades/{grade}/sections', [GradeController::class, 'syncSections']);
     Route::apiResource('schools.sections', SectionController::class);
     Route::apiResource('schools.subjects', SubjectController::class);
@@ -41,8 +65,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/schools/{school}/attendance', [AttendanceController::class, 'update']);
     Route::get('/schools/{school}/fee-types', [FeeTypeController::class, 'index']);
     Route::post('/schools/{school}/fee-types', [FeeTypeController::class, 'store']);
+    Route::get('/schools/{school}/fee-types/{feeType}', [FeeTypeController::class, 'show']);
     Route::patch('/schools/{school}/fee-types/{feeType}', [FeeTypeController::class, 'update']);
     Route::delete('/schools/{school}/fee-types/{feeType}', [FeeTypeController::class, 'destroy']);
+    Route::get('/schools/{school}/legacy-fee-types', [LegacyFeeTypeController::class, 'index']);
+    Route::post('/schools/{school}/legacy-fee-types', [LegacyFeeTypeController::class, 'store']);
+    Route::patch('/schools/{school}/legacy-fee-types/{feeType}', [LegacyFeeTypeController::class, 'update']);
+    Route::delete('/schools/{school}/legacy-fee-types/{feeType}', [LegacyFeeTypeController::class, 'destroy']);
     Route::get('/schools/{school}/fee-invoices', [FeeInvoiceController::class, 'index']);
     Route::post('/schools/{school}/fee-invoices', [FeeInvoiceController::class, 'store']);
     Route::delete('/schools/{school}/fee-invoices/{feeInvoice}', [FeeInvoiceController::class, 'destroy']);

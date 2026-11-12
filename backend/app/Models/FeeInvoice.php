@@ -27,7 +27,7 @@ class FeeInvoice extends Model
 
     public function feeType(): BelongsTo
     {
-        return $this->belongsTo(FeeType::class);
+        return $this->belongsTo(LegacyFeeType::class, 'fee_type_id');
     }
 
     public function payments(): HasMany

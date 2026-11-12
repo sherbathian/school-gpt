@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { apiRequest } from './api.js'
+import DataTools from './DataTools.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -19,13 +20,9 @@ function formatAmount(amount) {
   return Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export default function FeeManagement({ school }) {
-  const [open, setOpen] = useState(false)
-  const [academicYear, setAcademicYear] = useState(currentAcademicYear)
-  const [standardYears] = useState(() => {
-    const year = new Date().getFullYear()
-    return Array.from({ length: 6 }, (_, index) => `${year - 2 + index}-${year - 1 + index}`)
-  })
+export default function FeeManagement({ school, expanded = false, standalone = false, activeView = 'all' }) {
+  const [open, setOpen] = useState(expanded)
+  const [academicYear] = useState(school.active_session?.academic_year || currentAcademicYear())
   const [feeTypes, setFeeTypes] = useState([])
   const [invoices, setInvoices] = useState([])
   const [students, setStudents] = useState([])
@@ -41,11 +38,14 @@ export default function FeeManagement({ school }) {
   const [editFeeAmount, setEditFeeAmount] = useState('')
   const [payments, setPayments] = useState({})
   const [busyKey, setBusyKey] = useState('')
+  const [search, setSearch] = useState('')
+  const visibleInvoices = invoices.filter((invoice) => `${invoice.student.last_name} ${invoice.student.first_name} ${invoice.student.admission_number} ${invoice.fee_type.title} ${invoice.status} ${invoice.due_date}`.toLowerCase().includes(search.toLowerCase()))
+  const paymentImportReferences = useRef(new Set())
 
   const refreshData = useCallback(async (signal) => {
     const query = `academic_year=${encodeURIComponent(academicYear)}`
     const [feeTypeResponse, invoiceResponse, studentResponse] = await Promise.all([
-      apiRequest(`/api/schools/${school.id}/fee-types?${query}`, signal ? { signal } : undefined),
+      apiRequest(`/api/schools/${school.id}/legacy-fee-types?${query}`, signal ? { signal } : undefined),
       apiRequest(`/api/schools/${school.id}/fee-invoices?${query}`, signal ? { signal } : undefined),
       apiRequest(`/api/schools/${school.id}/students?${query}`, signal ? { signal } : undefined),
     ])
@@ -85,18 +85,12 @@ export default function FeeManagement({ school }) {
     return () => controller.abort()
   }, [open, academicYear, refreshData])
 
-  const academicYears = [...new Set([
-    ...feeTypes.map((feeType) => feeType.academic_year),
-    ...invoices.map((invoice) => invoice.academic_year),
-    ...standardYears,
-  ])].sort((left, right) => right.localeCompare(left))
-
   async function createFeeType(event) {
     event.preventDefault()
     setError('')
     setBusyKey('fee-type')
     try {
-      await readData(await apiRequest(`/api/schools/${school.id}/fee-types`, {
+      await readData(await apiRequest(`/api/schools/${school.id}/legacy-fee-types`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, amount, academic_year: academicYear }),
@@ -109,6 +103,43 @@ export default function FeeManagement({ school }) {
     } finally {
       setBusyKey('')
     }
+  }
+
+  async function importFeeType(row) {
+    const type = await readData(await apiRequest(`/api/schools/${school.id}/legacy-fee-types`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: row.title, amount: row.amount, academic_year: academicYear }),
+    }))
+    setFeeTypes((current) => [...current, type])
+  }
+
+  async function importInvoice(row) {
+    const student = students.find((item) => item.admission_number.toLowerCase() === row.admission_number.toLowerCase())
+    const feeType = feeTypes.find((item) => item.title.toLowerCase() === row.fee_item.toLowerCase() && item.status === 'active')
+    if (!student) throw new Error('Admission number does not match an active student enrolled this academic year.')
+    if (!feeType) throw new Error('Fee item does not match an active fee item for this academic year.')
+    await readData(await apiRequest(`/api/schools/${school.id}/fee-invoices`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: student.id, fee_type_id: feeType.id, academic_year: academicYear, due_date: row.due_date || null }),
+    }))
+    await refreshData()
+  }
+
+  async function importPayment(row) {
+    const invoice = invoices.find((item) => String(item.id) === String(row.invoice_id))
+    if (!invoice) throw new Error('Invoice ID is not part of this school’s active-year invoice list.')
+    const reference = row.reference.trim()
+    if (!reference) throw new Error('A payment reference is required for safe CSV duplicate checks.')
+    const referenceKey = `${invoice.id}:${reference.toLowerCase()}`
+    if (invoice.payments.some((payment) => payment.reference?.toLowerCase() === reference.toLowerCase()) || paymentImportReferences.current.has(referenceKey)) {
+      throw new Error('This payment reference is already recorded on the invoice.')
+    }
+    await readData(await apiRequest(`/api/schools/${school.id}/fee-invoices/${invoice.id}/payments`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: row.amount, paid_on: row.paid_on, reference }),
+    }))
+    paymentImportReferences.current.add(referenceKey)
+    await refreshData()
   }
 
   async function issueInvoice(event) {
@@ -134,7 +165,7 @@ export default function FeeManagement({ school }) {
     setError('')
     setBusyKey(`fee-type-${feeType.id}`)
     try {
-      await readData(await apiRequest(`/api/schools/${school.id}/fee-types/${feeType.id}`, { method: 'DELETE' }))
+      await readData(await apiRequest(`/api/schools/${school.id}/legacy-fee-types/${feeType.id}`, { method: 'DELETE' }))
       await refreshData()
     } catch (archiveError) {
       setError(archiveError.message)
@@ -148,7 +179,7 @@ export default function FeeManagement({ school }) {
     setError('')
     setBusyKey(`fee-type-${feeType.id}`)
     try {
-      await readData(await apiRequest(`/api/schools/${school.id}/fee-types/${feeType.id}`, {
+      await readData(await apiRequest(`/api/schools/${school.id}/legacy-fee-types/${feeType.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: editFeeTitle, amount: editFeeAmount }),
@@ -166,7 +197,7 @@ export default function FeeManagement({ school }) {
     setError('')
     setBusyKey(`fee-type-${feeType.id}`)
     try {
-      await readData(await apiRequest(`/api/schools/${school.id}/fee-types/${feeType.id}`, {
+      await readData(await apiRequest(`/api/schools/${school.id}/legacy-fee-types/${feeType.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'active' }),
@@ -213,26 +244,22 @@ export default function FeeManagement({ school }) {
 
   return (
     <div className="academic-structure">
-      <button className="team-toggle" type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+      {!standalone ? <button className="team-toggle" type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
         {open ? 'Hide fee management' : 'Manage fees'}
-      </button>
+      </button> : null}
       {open ? (
         <div className="academic-panel fee-panel">
           <div className="academic-section-heading">
             <h4>Fees</h4>
-            <label className="fee-year-filter" htmlFor={`fee-year-${school.id}`}>
-              Academic year
-              <select id={`fee-year-${school.id}`} value={academicYear} onChange={(event) => setAcademicYear(event.target.value)}>
-                {academicYears.map((year) => <option key={year} value={year}>{year}</option>)}
-              </select>
-            </label>
+            <span className="active-year-label">Academic year <strong>{academicYear}</strong></span>
           </div>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {loading ? <p className="muted-copy" role="status">Loading fees…</p> : null}
           {!loading ? (
             <>
-              <section aria-labelledby={`fee-items-heading-${school.id}`}>
-                <div className="academic-section-heading"><h4 id={`fee-items-heading-${school.id}`}>Fee items</h4><span>{feeTypes.length}</span></div>
+              {(activeView === 'all' || activeView === 'fee-items') ? <section aria-labelledby={`fee-items-heading-${school.id}`}>
+                <div className="academic-section-heading"><h4 id={`fee-items-heading-${school.id}`}>Invoice fee items</h4><span>{feeTypes.length}</span></div>
+                <DataTools title="Invoice fee items" rows={feeTypes} fields={[{ key: 'title', label: 'title', required: true }, { key: 'amount', label: 'amount', required: true }, { key: 'academic_year', label: 'academic_year' }, { key: 'status', label: 'status' }]} canImport onImport={importFeeType} />
                 <form className="fee-item-form" onSubmit={createFeeType}>
                   <label htmlFor={`fee-title-${school.id}`}>Fee item name</label>
                   <input id={`fee-title-${school.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
@@ -241,38 +268,20 @@ export default function FeeManagement({ school }) {
                   <button className="primary-button small-button" type="submit" disabled={busyKey === 'fee-type'}>Add fee item</button>
                 </form>
                 {feeTypes.length ? (
-                  <ul className="fee-type-list">
-                    {feeTypes.map((feeType) => (
-                      <li key={feeType.id}>
-                        {editingFeeTypeId === feeType.id ? (
-                          <form className="fee-type-edit-form" onSubmit={(event) => saveFeeType(event, feeType)}>
-                            <label className="visually-hidden" htmlFor={`edit-fee-title-${feeType.id}`}>Fee item name</label>
-                            <input id={`edit-fee-title-${feeType.id}`} value={editFeeTitle} onChange={(event) => setEditFeeTitle(event.target.value)} required />
-                            <label className="visually-hidden" htmlFor={`edit-fee-amount-${feeType.id}`}>Fee item amount</label>
-                            <input id={`edit-fee-amount-${feeType.id}`} type="number" min="0.01" step="0.01" value={editFeeAmount} onChange={(event) => setEditFeeAmount(event.target.value)} required />
-                            <button className="quiet-button" type="submit" disabled={busyKey === `fee-type-${feeType.id}`}>Save</button>
-                            <button className="quiet-button" type="button" onClick={() => setEditingFeeTypeId(null)}>Cancel</button>
-                          </form>
-                        ) : (
-                          <>
-                            <span>{feeType.title} <small>{feeType.status}</small></span>
-                            <strong>{formatAmount(feeType.amount)}</strong>
-                            <button className="quiet-button" type="button" onClick={() => {
-                              setEditFeeTitle(feeType.title)
-                              setEditFeeAmount(feeType.amount)
-                              setEditingFeeTypeId(feeType.id)
-                            }}>Edit</button>
-                            {feeType.status === 'active'
-                              ? <button className="quiet-button danger-action" type="button" onClick={() => archiveFeeType(feeType)} disabled={busyKey === `fee-type-${feeType.id}`}>Archive</button>
-                              : <button className="quiet-button" type="button" onClick={() => restoreFeeType(feeType)} disabled={busyKey === `fee-type-${feeType.id}`}>Restore</button>}
-                          </>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Fee item</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>{feeTypes.map((feeType) => (
+                    <Fragment key={feeType.id}>
+                      <tr><td>{feeType.title}</td><td>{formatAmount(feeType.amount)}</td><td>{feeType.status}</td><td><button className="quiet-button" type="button" onClick={() => { setEditFeeTitle(feeType.title); setEditFeeAmount(feeType.amount); setEditingFeeTypeId(feeType.id) }}>Edit</button>{feeType.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={() => archiveFeeType(feeType)} disabled={busyKey === `fee-type-${feeType.id}`}>Archive</button> : <button className="quiet-button" type="button" onClick={() => restoreFeeType(feeType)} disabled={busyKey === `fee-type-${feeType.id}`}>Restore</button>}</td></tr>
+                      {editingFeeTypeId === feeType.id ? <tr><td colSpan="4"><form className="fee-type-edit-form" onSubmit={(event) => saveFeeType(event, feeType)}>
+                        <label htmlFor={`edit-fee-title-${feeType.id}`}>Fee item name</label><input id={`edit-fee-title-${feeType.id}`} value={editFeeTitle} onChange={(event) => setEditFeeTitle(event.target.value)} required />
+                        <label htmlFor={`edit-fee-amount-${feeType.id}`}>Fee item amount</label><input id={`edit-fee-amount-${feeType.id}`} type="number" min="0.01" step="0.01" value={editFeeAmount} onChange={(event) => setEditFeeAmount(event.target.value)} required />
+                        <button className="quiet-button" type="submit" disabled={busyKey === `fee-type-${feeType.id}`}>Save</button><button className="quiet-button" type="button" onClick={() => setEditingFeeTypeId(null)}>Cancel</button>
+                      </form></td></tr> : null}
+                    </Fragment>
+                  ))}</tbody></table></div>
                 ) : <p className="muted-copy">No fee items for this academic year yet.</p>}
-              </section>
+              </section> : null}
 
+              {(activeView === 'all' || activeView === 'invoices') ? <>
               <section aria-labelledby={`issue-fee-heading-${school.id}`}>
                 <div className="academic-section-heading"><h4 id={`issue-fee-heading-${school.id}`}>Issue a student invoice</h4></div>
                 <form className="fee-issue-form" onSubmit={issueInvoice}>
@@ -295,31 +304,25 @@ export default function FeeManagement({ school }) {
 
               <section aria-labelledby={`invoices-heading-${school.id}`}>
                 <div className="academic-section-heading"><h4 id={`invoices-heading-${school.id}`}>Student invoices</h4><span>{invoices.length}</span></div>
+                <label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search invoices" placeholder="Search student, invoice or status" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+                <DataTools title="Student invoices" rows={invoices.map((invoice) => ({ admission_number: invoice.student.admission_number, student: `${invoice.student.last_name}, ${invoice.student.first_name}`, fee_item: invoice.fee_type.title, academic_year: invoice.academic_year, amount: invoice.amount, amount_paid: invoice.amount_paid, balance: invoice.balance, due_date: invoice.due_date, status: invoice.status }))} fields={[{ key: 'admission_number', label: 'admission_number', required: true }, { key: 'fee_item', label: 'fee_item', required: true }, { key: 'due_date', label: 'due_date' }]} exportFields={[{ key: 'admission_number', label: 'admission_number' }, { key: 'student', label: 'student' }, { key: 'fee_item', label: 'fee_item' }, { key: 'academic_year', label: 'academic_year' }, { key: 'amount', label: 'amount' }, { key: 'amount_paid', label: 'amount_paid' }, { key: 'balance', label: 'balance' }, { key: 'due_date', label: 'due_date' }, { key: 'status', label: 'status' }]} canImport onImport={importInvoice} />
+                <DataTools title="Payment history" rows={invoices.flatMap((invoice) => invoice.payments.map((payment) => ({ invoice_id: invoice.id, admission_number: invoice.student.admission_number, student: `${invoice.student.last_name}, ${invoice.student.first_name}`, fee_item: invoice.fee_type.title, amount: payment.amount, paid_on: payment.paid_on, reference: payment.reference || '' })))} fields={[{ key: 'invoice_id', label: 'invoice_id', required: true }, { key: 'amount', label: 'amount', required: true }, { key: 'paid_on', label: 'paid_on', required: true }, { key: 'reference', label: 'reference', required: true }]} exportFields={[{ key: 'invoice_id', label: 'invoice_id' }, { key: 'admission_number', label: 'admission_number' }, { key: 'student', label: 'student' }, { key: 'fee_item', label: 'fee_item' }, { key: 'amount', label: 'amount' }, { key: 'paid_on', label: 'paid_on' }, { key: 'reference', label: 'reference' }]} canImport onImport={importPayment} />
                 {invoices.length ? (
-                  <ul className="fee-invoice-list">
-                    {invoices.map((invoice) => (
-                      <li key={invoice.id} className="fee-invoice-card">
-                        <div className="fee-invoice-summary">
-                          <strong>{invoice.student.last_name}, {invoice.student.first_name}</strong>
-                          <span>{invoice.student.admission_number} · {invoice.fee_type.title} · {invoice.status}</span>
-                          <span>Amount {formatAmount(invoice.amount)} · Paid {formatAmount(invoice.amount_paid)} · Balance {formatAmount(invoice.balance)}{invoice.due_date ? ` · Due ${invoice.due_date}` : ''}</span>
-                        </div>
-                        {invoice.status !== 'void' && Number(invoice.balance) > 0 ? (
-                          <form className="fee-payment-form" onSubmit={(event) => recordPayment(event, invoice)}>
-                            <label className="visually-hidden" htmlFor={`payment-amount-${invoice.id}`}>Payment amount for invoice {invoice.id}</label>
-                            <input id={`payment-amount-${invoice.id}`} type="number" min="0.01" max={invoice.balance} step="0.01" placeholder="Amount" value={payments[invoice.id]?.amount || ''} onChange={(event) => setPayments((current) => ({ ...current, [invoice.id]: { ...current[invoice.id], amount: event.target.value } }))} required />
-                            <label className="visually-hidden" htmlFor={`payment-reference-${invoice.id}`}>Payment reference for invoice {invoice.id}</label>
-                            <input id={`payment-reference-${invoice.id}`} placeholder="Receipt reference (optional)" value={payments[invoice.id]?.reference || ''} onChange={(event) => setPayments((current) => ({ ...current, [invoice.id]: { ...current[invoice.id], reference: event.target.value } }))} />
-                            <button className="primary-button small-button" type="submit" disabled={busyKey === `payment-${invoice.id}`}>Record payment</button>
-                          </form>
-                        ) : null}
-                        {invoice.status !== 'void' && invoice.amount_paid === '0.00' ? <button className="quiet-button danger-action" type="button" onClick={() => voidInvoice(invoice)} disabled={busyKey === `invoice-${invoice.id}`}>Void invoice</button> : null}
-                        {invoice.payments.length ? <details className="fee-payment-history"><summary>Payment history ({invoice.payments.length})</summary><ul>{invoice.payments.map((payment) => <li key={payment.id}>{formatAmount(payment.amount)} · {payment.paid_on}{payment.reference ? ` · ${payment.reference}` : ''}</li>)}</ul></details> : null}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Student</th><th>Invoice</th><th>Record payment</th><th>Actions / history</th></tr></thead><tbody>
+                    {visibleInvoices.map((invoice) => <tr key={invoice.id}>
+                      <td>{invoice.student.last_name}, {invoice.student.first_name}<small>{invoice.student.admission_number}</small></td>
+                      <td>{invoice.fee_type.title} · {invoice.status}<small>Amount {formatAmount(invoice.amount)} · Paid {formatAmount(invoice.amount_paid)} · Balance {formatAmount(invoice.balance)}{invoice.due_date ? ` · Due ${invoice.due_date}` : ''}</small></td>
+                      <td>{invoice.status !== 'void' && Number(invoice.balance) > 0 ? <form className="fee-payment-form" onSubmit={(event) => recordPayment(event, invoice)}>
+                        <label className="visually-hidden" htmlFor={`payment-amount-${invoice.id}`}>Payment amount for invoice {invoice.id}</label><input id={`payment-amount-${invoice.id}`} type="number" min="0.01" max={invoice.balance} step="0.01" placeholder="Amount" value={payments[invoice.id]?.amount || ''} onChange={(event) => setPayments((current) => ({ ...current, [invoice.id]: { ...current[invoice.id], amount: event.target.value } }))} required />
+                        <label className="visually-hidden" htmlFor={`payment-reference-${invoice.id}`}>Payment reference for invoice {invoice.id}</label><input id={`payment-reference-${invoice.id}`} placeholder="Receipt reference (optional)" value={payments[invoice.id]?.reference || ''} onChange={(event) => setPayments((current) => ({ ...current, [invoice.id]: { ...current[invoice.id], reference: event.target.value } }))} />
+                        <button className="primary-button small-button" type="submit" disabled={busyKey === `payment-${invoice.id}`}>Record payment</button>
+                      </form> : '—'}</td>
+                      <td>{invoice.status !== 'void' && invoice.amount_paid === '0.00' ? <button className="quiet-button danger-action" type="button" onClick={() => voidInvoice(invoice)} disabled={busyKey === `invoice-${invoice.id}`}>Void</button> : null}{invoice.payments.length ? <details className="fee-payment-history"><summary>Payments ({invoice.payments.length})</summary><ul>{invoice.payments.map((payment) => <li key={payment.id}>{formatAmount(payment.amount)} · {payment.paid_on}{payment.reference ? ` · ${payment.reference}` : ''}</li>)}</ul></details> : null}</td>
+                    </tr>)}
+                  </tbody></table></div>
                 ) : <p className="muted-copy">No invoices for {academicYear} yet.</p>}
               </section>
+              </> : null}
             </>
           ) : null}
         </div>

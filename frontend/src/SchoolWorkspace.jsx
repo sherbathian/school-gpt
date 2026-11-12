@@ -3,17 +3,21 @@ import { apiRequest } from './api.js'
 import AcademicStructure from './AcademicStructure.jsx'
 import StudentRoster from './StudentRoster.jsx'
 import FeeManagement from './FeeManagement.jsx'
+import FeeSetup from './FeeSetup.jsx'
 import SchoolSessions from './SchoolSessions.jsx'
+import StaffManagement from './StaffManagement.jsx'
+import DataTools from './DataTools.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(result.errors?.email?.[0] || result.errors?.slug?.[0] || result.message || 'That request could not be completed.')
+    const validationMessage = Object.values(result.errors || {}).flat()[0]
+    throw new Error(validationMessage || result.message || 'That request could not be completed.')
   }
   return result.data
 }
 
-function SchoolCard({ school, user, onUpdated, onArchived }) {
+function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange, onNavigate, activeModule = 'schools' }) {
   const canManageUsers = user.is_super_admin || school.role === 'school_admin'
   const canTakeAttendance = user.is_super_admin || ['school_admin', 'teacher'].includes(school.role)
   const [editing, setEditing] = useState(false)
@@ -94,6 +98,14 @@ function SchoolCard({ school, user, onUpdated, onArchived }) {
     }
   }
 
+  async function importMember(row) {
+    const added = await readData(await apiRequest(`/api/schools/${school.id}/users`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: row.email, role: 'teacher' }),
+    }))
+    setMembers((current) => [...current, added].sort((left, right) => left.name.localeCompare(right.name)))
+  }
+
   async function updateMember(member, changes) {
     setError('')
     try {
@@ -119,7 +131,7 @@ function SchoolCard({ school, user, onUpdated, onArchived }) {
   }
 
   return (
-    <article className="school-card">
+    <article className="school-card" id={`school-${school.id}`}>
       <div className="school-card-heading">
         <span className="school-avatar" aria-hidden="true">{school.name.slice(0, 1)}</span>
         <div className="school-title-group">
@@ -129,7 +141,7 @@ function SchoolCard({ school, user, onUpdated, onArchived }) {
         <span className="role-pill">{school.role.replace('_', ' ')}</span>
       </div>
 
-      {user.is_super_admin && editing ? (
+      {activeModule === 'schools' && user.is_super_admin && editing ? (
         <form className="school-edit-form" onSubmit={saveSchool}>
           <label htmlFor={`school-name-${school.id}`}>School name</label>
           <input id={`school-name-${school.id}`} value={name} onChange={(event) => setName(event.target.value)} required />
@@ -147,14 +159,14 @@ function SchoolCard({ school, user, onUpdated, onArchived }) {
         </form>
       ) : null}
 
-      {user.is_super_admin && !editing ? (
+      {activeModule === 'schools' && user.is_super_admin && !editing ? (
         <div className="card-actions">
           <button className="quiet-button" type="button" onClick={() => { setName(school.name); setSlug(school.slug); setEditStatus(school.status); setEditing(true) }}>Edit school</button>
           <button className="quiet-button danger-action" type="button" onClick={archiveSchool} disabled={busy}>Archive</button>
         </div>
       ) : null}
 
-      {canManageUsers ? (
+      {activeModule === 'schools' && canManageUsers ? (
         <>
           <button className="team-toggle" type="button" aria-expanded={teamOpen} onClick={openTeam}>
             {teamOpen ? 'Hide school team' : 'Manage school team'}
@@ -162,6 +174,7 @@ function SchoolCard({ school, user, onUpdated, onArchived }) {
           {teamOpen ? (
             <div className="team-panel">
               <h4>School team</h4>
+              <DataTools title="School team" rows={members} fields={[{ key: 'name', label: 'name' }, { key: 'email', label: 'email', required: true }]} canImport={canManageUsers} onImport={importMember} />
               {busy && members.length === 0 ? <p className="muted-copy">Loading team…</p> : null}
               {members.length ? (
                 <ul className="team-list">
@@ -204,10 +217,13 @@ function SchoolCard({ school, user, onUpdated, onArchived }) {
         </>
       ) : null}
 
-      <AcademicStructure school={school} canManage={canManageUsers} />
-      <SchoolSessions school={school} canManage={canManageUsers} />
-      <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} />
-      {canManageUsers ? <FeeManagement school={school} /> : null}
+      {activeModule.startsWith('academic-') && activeModule !== 'academic-years' ? <AcademicStructure school={school} canManage={canManageUsers} expanded standalone activeSection={activeModule.replace('academic-', '')} /> : null}
+      {activeModule === 'academic-years' ? <SchoolSessions school={school} canManage={canManageUsers} onCurrentChange={onActiveSessionChange} /> : null}
+      {activeModule.startsWith('staff-') ? <StaffManagement school={school} canManage={canManageUsers} activeView={activeModule} onNavigate={onNavigate} /> : null}
+      {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded standalone /> : null}
+      {activeModule === 'attendance' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded attendanceOnly standalone /> : null}
+      {['fees-catalog', 'fees-discounts', 'fees-groups', 'fees-masters'].includes(activeModule) && canManageUsers ? <FeeSetup school={school} activeSection={activeModule.replace('fees-', '') === 'catalog' ? 'fee-types' : activeModule.replace('fees-', '')} /> : null}
+      {['fee-items', 'invoices'].includes(activeModule) && canManageUsers ? <FeeManagement school={school} expanded standalone activeView={activeModule} /> : null}
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
     </article>
@@ -221,6 +237,8 @@ export default function SchoolWorkspace({ user, onLogout }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [activeModule, setActiveModule] = useState('overview')
+  const [selectedSchoolId, setSelectedSchoolId] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -240,6 +258,10 @@ export default function SchoolWorkspace({ user, onLogout }) {
     return () => controller.abort()
   }, [])
 
+  const activeSchoolId = schools.some((school) => String(school.id) === selectedSchoolId)
+    ? selectedSchoolId
+    : String(schools[0]?.id || '')
+
   async function createSchool(event) {
     event.preventDefault()
     setBusy(true)
@@ -251,6 +273,8 @@ export default function SchoolWorkspace({ user, onLogout }) {
         body: JSON.stringify({ name, slug: slug || undefined }),
       }))
       setSchools((current) => [...current, created].sort((left, right) => left.name.localeCompare(right.name)))
+      setSelectedSchoolId(String(created.id))
+      setActiveModule('academic-sections')
       setName('')
       setSlug('')
     } catch (createError) {
@@ -260,22 +284,84 @@ export default function SchoolWorkspace({ user, onLogout }) {
     }
   }
 
+  async function importSchool(row) {
+    const created = await readData(await apiRequest('/api/schools', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: row.name, slug: row.slug || undefined }),
+    }))
+    setSchools((current) => [...current, created].sort((left, right) => left.name.localeCompare(right.name)))
+  }
+
   function updateSchool(updated) {
     setSchools((current) => current.map((school) => school.id === updated.id ? updated : school))
   }
 
+  function updateActiveSession(schoolId, session) {
+    setSchools((current) => current.map((school) => String(school.id) === String(schoolId) ? {
+      ...school,
+      active_session: { id: session.id, title: session.title, academic_year: `${session.starts_on.slice(0, 4)}-${session.ends_on.slice(0, 4)}`, starts_on: session.starts_on, ends_on: session.ends_on },
+    } : school))
+  }
+
+  const activeSchool = schools.find((school) => String(school.id) === activeSchoolId)
+  const canManageSchool = user.is_super_admin || activeSchool?.role === 'school_admin'
+  const navGroups = [
+    { title: 'GENERAL', items: [['overview', '▦', 'Overview'], ['schools', '⌂', 'Schools']] },
+    { title: 'ACADEMICS', items: [['academic-sections', '▤', 'Sections'], ['academic-grades', '▤', 'Grades'], ['academic-subjects', '◈', 'Subjects'], ['academic-years', '◷', 'Academic years']] },
+    { title: 'PEOPLE', items: [['staff-directory', '♙', 'Staff'], ['staff-create', '＋', 'Add staff'], ['staff-designations', '◇', 'Designations'], ['staff-departments', '▥', 'Departments'], ['staff-leave-types', '◷', 'Leave types'], ['students', '♧', 'Students'], ['attendance', '✓', 'Attendance']] },
+    { title: 'FINANCE', items: [['fees-catalog', '＄', 'Fee catalog'], ['fees-discounts', '%', 'Discounts'], ['fees-groups', '▣', 'Fee groups'], ['fees-masters', '▤', 'Fee masters'], ['fee-items', '＋', 'Invoice fee items'], ['invoices', '▧', 'Invoices & payments']] },
+  ].map((group) => ({
+    ...group,
+    items: group.items.filter(([key]) => {
+      if (key.startsWith('fees-') || key === 'fee-items' || key === 'invoices') return canManageSchool
+      if (['staff-create', 'staff-designations', 'staff-departments', 'staff-leave-types'].includes(key)) return canManageSchool
+      return true
+    }),
+  })).filter((group) => group.items.length)
+  const moduleLabels = Object.fromEntries(navGroups.flatMap(({ items }) => items.map(([key, , label]) => [key, label])))
+  const activeModuleLabel = moduleLabels[activeModule] || 'Overview'
+
   return (
-    <section className="account-layout" aria-labelledby="account-title">
+    <section className="account-layout dashboard-layout" aria-labelledby="account-title">
+      <aside className="dashboard-sidebar" aria-label="School management navigation">
+        <a className="dashboard-brand" href="#account-title"><span className="dashboard-brand-mark">S</span><span>Schoolhouse<small>ADMIN CONSOLE</small></span></a>
+        <p className="sidebar-label">WORKSPACE</p>
+        <nav className="dashboard-nav" aria-label="Workspace pages">
+          {navGroups.map((group) => <div className="dashboard-nav-group" key={group.title}>
+            <p className="sidebar-label">{group.title}</p>
+            {group.items.map(([key, icon, label]) => (
+              <button key={key} className={activeModule === key ? 'active' : ''} type="button" aria-current={activeModule === key ? 'page' : undefined} onClick={() => setActiveModule(key)}>
+                <span>{icon}</span>{label}{key === 'schools' ? <b>{schools.length}</b> : null}
+              </button>
+            ))}
+          </div>)}
+        </nav>
+        <div className="sidebar-help"><span className="help-icon">?</span><strong>Need a hand?</strong><p>Contact your platform administrator for workspace access.</p></div>
+        <div className="sidebar-user"><span className="user-avatar">{user.name.slice(0, 1).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.is_super_admin ? 'Platform admin' : 'School account'}</small></span></div>
+      </aside>
+      <div className="dashboard-main">
+      <div className="dashboard-topbar">
+        <div className="breadcrumb">Workspace <span>/</span> <strong>{activeModuleLabel}</strong></div>
+        <div className="topbar-controls">
+          {activeModule !== 'overview' && activeModule !== 'schools' && schools.length ? <label className="school-picker">School<select aria-label="Selected school" value={activeSchoolId} onChange={(event) => setSelectedSchoolId(event.target.value)}>{schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select></label> : null}
+          <div className="topbar-user"><span className="user-avatar">{user.name.slice(0, 1).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.email}</small></span><button className="secondary-button" type="button" onClick={onLogout}>Sign out</button></div>
+        </div>
+      </div>
       <div className="account-heading">
         <div>
-          <p className="eyebrow">{user.is_super_admin ? 'Platform administration' : 'School workspace'}</p>
-          <h1 id="account-title">Welcome, {user.name}.</h1>
-          <p className="intro">{user.email}</p>
+          <p className="eyebrow">{activeModule === 'overview' ? (user.is_super_admin ? 'PLATFORM OVERVIEW' : 'SCHOOL OVERVIEW') : 'SCHOOL MANAGEMENT'}</p>
+          <h1 id="account-title">{activeModule === 'overview' ? `Good to see you, ${user.name.split(' ')[0]}.` : activeModuleLabel}</h1>
+          <p className="intro">{activeModule === 'overview' ? 'Here’s what’s happening across your school workspace.' : `Manage ${activeModuleLabel.toLowerCase()} for ${activeSchool?.name || 'your school'}.`}</p>
         </div>
-        <button className="secondary-button" type="button" onClick={onLogout}>Sign out</button>
       </div>
 
-      {user.is_super_admin ? (
+      {activeModule === 'overview' ? <div className="overview-stats" aria-label="Workspace summary">
+        <article className="overview-stat"><span className="stat-icon stat-indigo">▤</span><div><span>Total schools</span><strong>{loading ? '—' : schools.length}</strong><small>In your workspace</small></div><span className="stat-sparkline">⌁</span></article>
+        <article className="overview-stat"><span className="stat-icon stat-green">✓</span><div><span>Active schools</span><strong>{loading ? '—' : schools.filter((school) => school.status === 'active').length}</strong><small>Ready to manage</small></div><span className="stat-sparkline green">⌁</span></article>
+        <article className="overview-stat"><span className="stat-icon stat-orange">♙</span><div><span>Your access</span><strong className="stat-role">{user.is_super_admin ? 'Platform admin' : 'School team'}</strong><small>{user.is_super_admin ? 'All schools' : 'Assigned schools'}</small></div><span className="stat-sparkline orange">⌁</span></article>
+      </div> : null}
+
+      {activeModule === 'schools' && user.is_super_admin ? (
         <form className="create-school-card" onSubmit={createSchool}>
           <div>
             <p className="eyebrow">School directory</p>
@@ -292,11 +378,12 @@ export default function SchoolWorkspace({ user, onLogout }) {
       ) : null}
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <div className="school-directory">
+      {activeModule === 'overview' || activeModule === 'schools' ? <div className="school-directory" id="school-directory">
         <div className="directory-heading">
           <h2>{user.is_super_admin ? 'Schools' : 'Your schools'}</h2>
           <span>{schools.length} {schools.length === 1 ? 'school' : 'schools'}</span>
         </div>
+        <DataTools title="Schools" rows={schools} fields={[{ key: 'name', label: 'name', required: true }, { key: 'slug', label: 'slug' }, { key: 'status', label: 'status' }]} canImport={user.is_super_admin && activeModule === 'schools'} onImport={importSchool} />
         {loading ? <p className="muted-copy" role="status">Loading schools…</p> : null}
         {!loading && schools.length === 0 ? (
           <p className="empty-memberships">
@@ -309,11 +396,19 @@ export default function SchoolWorkspace({ user, onLogout }) {
               key={school.id}
               school={school}
               user={user}
+              activeModule={activeModule}
+              onNavigate={setActiveModule}
               onUpdated={updateSchool}
               onArchived={(id) => setSchools((current) => current.filter((item) => item.id !== id))}
             />
           ))}
         </div>
+      </div> : null}
+      {activeModule !== 'overview' && activeModule !== 'schools' ? (
+        schools.find((school) => String(school.id) === activeSchoolId)
+          ? <div className="active-module-page"><SchoolCard key={`${activeSchoolId}-${activeModule}`} school={schools.find((school) => String(school.id) === activeSchoolId)} user={user} onUpdated={updateSchool} onActiveSessionChange={(session) => updateActiveSession(activeSchoolId, session)} onArchived={(id) => { setSchools((current) => current.filter((item) => item.id !== id)); setActiveModule('schools') }} onNavigate={setActiveModule} activeModule={activeModule} /></div>
+          : <p className="empty-memberships">{loading ? 'Loading schools…' : 'Add or select a school to open this module.'}</p>
+      ) : null}
       </div>
     </section>
   )

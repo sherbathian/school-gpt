@@ -13,20 +13,15 @@ class FeeType extends Model
     /** @use HasFactory<FeeTypeFactory> */
     use HasFactory;
 
-    protected $fillable = ['school_id', 'title', 'academic_year', 'amount_cents', 'status'];
-
-    protected function casts(): array
-    {
-        return ['amount_cents' => 'integer'];
-    }
+    protected $fillable = ['title', 'description'];
 
     public function school(): BelongsTo
     {
         return $this->belongsTo(School::class);
     }
 
-    public function invoices(): HasMany
+    public function feeMasters(): HasMany
     {
-        return $this->hasMany(FeeInvoice::class);
+        return $this->hasMany(FeeMaster::class);
     }
 }

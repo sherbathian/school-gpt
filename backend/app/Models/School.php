@@ -41,9 +41,19 @@ class School extends Model
         return $this->hasMany(Student::class);
     }
 
+    public function guardians(): HasMany
+    {
+        return $this->hasMany(Guardian::class);
+    }
+
     public function feeTypes(): HasMany
     {
         return $this->hasMany(FeeType::class);
+    }
+
+    public function legacyFeeTypes(): HasMany
+    {
+        return $this->hasMany(LegacyFeeType::class, 'school_id');
     }
 
     public function feeInvoices(): HasMany
@@ -51,8 +61,43 @@ class School extends Model
         return $this->hasMany(FeeInvoice::class);
     }
 
+    public function feeDiscounts(): HasMany
+    {
+        return $this->hasMany(FeeDiscount::class);
+    }
+
+    public function feeGroups(): HasMany
+    {
+        return $this->hasMany(FeeGroup::class);
+    }
+
+    public function feeMasters(): HasMany
+    {
+        return $this->hasMany(FeeMaster::class);
+    }
+
     public function schoolSessions(): HasMany
     {
         return $this->hasMany(SchoolSession::class);
+    }
+
+    public function designations(): HasMany
+    {
+        return $this->hasMany(Designation::class);
+    }
+
+    public function departments(): HasMany
+    {
+        return $this->hasMany(Department::class);
+    }
+
+    public function leaveTypes(): HasMany
+    {
+        return $this->hasMany(LeaveType::class);
+    }
+
+    public function staff(): HasMany
+    {
+        return $this->hasMany(Staff::class);
     }
 }

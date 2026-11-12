@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
+import DataTools from './DataTools.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -56,55 +57,15 @@ function GradeCard({ schoolId, grade, sections, canManage, onUpdated }) {
   }
 
   return (
-    <article className="academic-item">
-      <div className="academic-item-heading">
-        <div>
-          <h4>{grade.title}</h4>
-          <p>{grade.status}</p>
-        </div>
-        {canManage ? (
-          <div className="academic-actions">
-            <button className="quiet-button" type="button" onClick={() => {
-              setTitle(grade.title)
-              setStatus(grade.status)
-              setSelectedSections(grade.sections.map((section) => section.id))
-              setEditing((current) => !current)
-            }}>{editing ? 'Cancel' : 'Edit'}</button>
-            {grade.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveGrade} disabled={busy}>Archive</button> : null}
-          </div>
-        ) : null}
-      </div>
-
-      {editing ? (
-        <form className="academic-edit-form" onSubmit={saveGrade}>
-          <label htmlFor={`grade-title-${grade.id}`}>Grade title</label>
-          <input id={`grade-title-${grade.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
-          <label htmlFor={`grade-status-${grade.id}`}>Status</label>
-          <select id={`grade-status-${grade.id}`} value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <fieldset className="section-checklist">
-            <legend>Assigned sections</legend>
-            {sections.filter((section) => section.status === 'active').map((section) => (
-              <label key={section.id}>
-                <input type="checkbox" checked={selectedSections.includes(section.id)} onChange={() => toggleSection(section.id)} />
-                {section.title}
-              </label>
-            ))}
-            {sections.filter((section) => section.status === 'active').length === 0 ? <p className="muted-copy">Add an active section first.</p> : null}
-          </fieldset>
-          <button className="primary-button small-button" type="submit" disabled={busy}>Save grade</button>
-        </form>
-      ) : (
-        <p className="assigned-sections">
-          {grade.sections.length
-            ? `Sections: ${grade.sections.map((section) => section.title).join(', ')}`
-            : 'No sections assigned'}
-        </p>
-      )}
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-    </article>
+    <Fragment>
+      <tr><td>{grade.title}<small>{grade.status}</small></td><td>{grade.sections.map((section) => section.title).join(', ') || '—'}</td><td>{canManage ? <><button className="quiet-button" type="button" onClick={() => { setTitle(grade.title); setStatus(grade.status); setSelectedSections(grade.sections.map((section) => section.id)); setEditing((current) => !current) }}>{editing ? 'Cancel' : 'Edit'}</button>{grade.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveGrade} disabled={busy}>Archive</button> : null}</> : null}</td></tr>
+      {editing ? <tr><td colSpan="3"><form className="academic-edit-form" onSubmit={saveGrade}>
+        <label htmlFor={`grade-title-${grade.id}`}>Grade title</label><input id={`grade-title-${grade.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
+        <label htmlFor={`grade-status-${grade.id}`}>Status</label><select id={`grade-status-${grade.id}`} value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Active</option><option value="inactive">Inactive</option></select>
+        <fieldset className="section-checklist"><legend>Assigned sections</legend>{sections.filter((section) => section.status === 'active').map((section) => <label key={section.id}><input type="checkbox" checked={selectedSections.includes(section.id)} onChange={() => toggleSection(section.id)} />{section.title}</label>)}{sections.filter((section) => section.status === 'active').length === 0 ? <p className="muted-copy">Add an active section first.</p> : null}</fieldset>
+        <button className="primary-button small-button" type="submit" disabled={busy}>Save grade</button>
+      </form>{error ? <p className="form-error" role="alert">{error}</p> : null}</td></tr> : error ? <tr><td colSpan="3"><p className="form-error" role="alert">{error}</p></td></tr> : null}
+    </Fragment>
   )
 }
 
@@ -141,37 +102,17 @@ function SectionCard({ schoolId, section, canManage, onUpdated }) {
   }
 
   return (
-    <li className="section-item">
-      {editing ? (
-        <form className="section-edit-form" onSubmit={saveSection}>
-          <label className="visually-hidden" htmlFor={`section-title-${section.id}`}>Section title</label>
-          <input id={`section-title-${section.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
-          <label className="visually-hidden" htmlFor={`section-status-${section.id}`}>Section status</label>
-          <select id={`section-status-${section.id}`} value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <button className="quiet-button" type="submit">Save</button>
-          <button className="quiet-button" type="button" onClick={() => setEditing(false)}>Cancel</button>
-        </form>
-      ) : (
-        <>
-          <span>{section.title}</span>
-          <span className="status-pill">{section.status}</span>
-          {canManage ? (
-            <div className="academic-actions">
-              <button className="quiet-button" type="button" onClick={() => {
-                setTitle(section.title)
-                setStatus(section.status)
-                setEditing(true)
-              }}>Edit</button>
-              {section.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveSection}>Archive</button> : null}
-            </div>
-          ) : null}
-        </>
-      )}
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-    </li>
+    <Fragment>
+      <tr>
+        <td>{section.title}</td><td>{section.status}</td>
+        <td>{canManage ? <><button className="quiet-button" type="button" onClick={() => { setTitle(section.title); setStatus(section.status); setEditing(true) }}>Edit</button>{section.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveSection}>Archive</button> : null}</> : null}</td>
+      </tr>
+      {editing ? <tr><td colSpan="3"><form className="section-edit-form" onSubmit={saveSection}>
+        <label htmlFor={`section-title-${section.id}`}>Section title</label><input id={`section-title-${section.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
+        <label htmlFor={`section-status-${section.id}`}>Status</label><select id={`section-status-${section.id}`} value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Active</option><option value="inactive">Inactive</option></select>
+        <button className="quiet-button" type="submit">Save</button><button className="quiet-button" type="button" onClick={() => setEditing(false)}>Cancel</button>
+      </form>{error ? <p className="form-error" role="alert">{error}</p> : null}</td></tr> : error ? <tr><td colSpan="3"><p className="form-error" role="alert">{error}</p></td></tr> : null}
+    </Fragment>
   )
 }
 
@@ -215,57 +156,20 @@ function SubjectCard({ schoolId, subject, grades, canManage, onUpdated }) {
   }
 
   return (
-    <article className="academic-item">
-      <div className="academic-item-heading">
-        <div>
-          <h4>{subject.title}</h4>
-          <p>{subject.status}</p>
-        </div>
-        {canManage ? (
-          <div className="academic-actions">
-            <button className="quiet-button" type="button" onClick={() => {
-              setTitle(subject.title)
-              setStatus(subject.status)
-              setSelectedGrades(subject.grades.map((grade) => grade.id))
-              setEditing((current) => !current)
-            }}>{editing ? 'Cancel' : 'Edit'}</button>
-            {subject.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveSubject}>Archive</button> : null}
-          </div>
-        ) : null}
-      </div>
-      {editing ? (
-        <form className="academic-edit-form" onSubmit={saveSubject}>
-          <label htmlFor={`subject-title-${subject.id}`}>Subject title</label>
-          <input id={`subject-title-${subject.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
-          <label htmlFor={`subject-status-${subject.id}`}>Status</label>
-          <select id={`subject-status-${subject.id}`} value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <fieldset className="section-checklist">
-            <legend>Assigned grades</legend>
-            {grades.filter((grade) => grade.status === 'active').map((grade) => (
-              <label key={grade.id}>
-                <input type="checkbox" checked={selectedGrades.includes(grade.id)} onChange={() => toggleGrade(grade.id)} />
-                {grade.title}
-              </label>
-            ))}
-            {grades.filter((grade) => grade.status === 'active').length === 0 ? <p className="muted-copy">Add an active grade first.</p> : null}
-          </fieldset>
-          <button className="primary-button small-button" type="submit">Save subject</button>
-        </form>
-      ) : (
-        <p className="assigned-sections">
-          {subject.grades.length ? `Grades: ${subject.grades.map((grade) => grade.title).join(', ')}` : 'No grades assigned'}
-        </p>
-      )}
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-    </article>
+    <Fragment>
+      <tr><td>{subject.title}<small>{subject.status}</small></td><td>{subject.grades.map((grade) => grade.title).join(', ') || '—'}</td><td>{canManage ? <><button className="quiet-button" type="button" onClick={() => { setTitle(subject.title); setStatus(subject.status); setSelectedGrades(subject.grades.map((grade) => grade.id)); setEditing((current) => !current) }}>{editing ? 'Cancel' : 'Edit'}</button>{subject.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveSubject}>Archive</button> : null}</> : null}</td></tr>
+      {editing ? <tr><td colSpan="3"><form className="academic-edit-form" onSubmit={saveSubject}>
+        <label htmlFor={`subject-title-${subject.id}`}>Subject title</label><input id={`subject-title-${subject.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
+        <label htmlFor={`subject-status-${subject.id}`}>Status</label><select id={`subject-status-${subject.id}`} value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Active</option><option value="inactive">Inactive</option></select>
+        <fieldset className="section-checklist"><legend>Assigned grades</legend>{grades.filter((grade) => grade.status === 'active').map((grade) => <label key={grade.id}><input type="checkbox" checked={selectedGrades.includes(grade.id)} onChange={() => toggleGrade(grade.id)} />{grade.title}</label>)}{grades.filter((grade) => grade.status === 'active').length === 0 ? <p className="muted-copy">Add an active grade first.</p> : null}</fieldset>
+        <button className="primary-button small-button" type="submit">Save subject</button>
+      </form>{error ? <p className="form-error" role="alert">{error}</p> : null}</td></tr> : error ? <tr><td colSpan="3"><p className="form-error" role="alert">{error}</p></td></tr> : null}
+    </Fragment>
   )
 }
 
-export default function AcademicStructure({ school, canManage }) {
-  const [open, setOpen] = useState(false)
+export default function AcademicStructure({ school, canManage, expanded = false, standalone = false, activeSection = 'all' }) {
+  const [open, setOpen] = useState(expanded)
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [grades, setGrades] = useState([])
@@ -276,7 +180,11 @@ export default function AcademicStructure({ school, canManage }) {
   const [sectionTitle, setSectionTitle] = useState('')
   const [subjectTitle, setSubjectTitle] = useState('')
   const [subjectGradeIds, setSubjectGradeIds] = useState([])
+  const [search, setSearch] = useState('')
   const [error, setError] = useState('')
+  const matchingSections = sections.filter((item) => `${item.title} ${item.status}`.toLowerCase().includes(search.toLowerCase()))
+  const matchingGrades = grades.filter((item) => `${item.title} ${item.status} ${item.sections.map((section) => section.title).join(' ')}`.toLowerCase().includes(search.toLowerCase()))
+  const matchingSubjects = subjects.filter((item) => `${item.title} ${item.status} ${item.grades.map((grade) => grade.title).join(' ')}`.toLowerCase().includes(search.toLowerCase()))
 
   useEffect(() => {
     if (!open || loaded) return undefined
@@ -381,22 +289,50 @@ export default function AcademicStructure({ school, canManage }) {
     }
   }
 
+  async function importRecord(resource, row) {
+    const payload = { title: row.title, ...(row.status ? { status: row.status } : {}) }
+    if (resource === 'grades' && row.sections) {
+      const selectedSections = row.sections.split(';').map((title) => title.trim().toLowerCase()).filter(Boolean)
+      payload.section_ids = selectedSections.map((title) => {
+        const section = sections.find((item) => item.title.toLowerCase() === title)
+        if (!section) throw new Error(`Section “${title}” does not exist in this school.`)
+        return section.id
+      })
+    }
+    if (resource === 'subjects' && row.grades) {
+      const selectedGrades = row.grades.split(';').map((title) => title.trim().toLowerCase()).filter(Boolean)
+      payload.grade_ids = selectedGrades.map((title) => {
+        const grade = grades.find((item) => item.title.toLowerCase() === title)
+        if (!grade) throw new Error(`Grade “${title}” does not exist in this school.`)
+        return grade.id
+      })
+    }
+    const created = await readData(await apiRequest(`/api/schools/${school.id}/${resource}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }))
+    const setRows = resource === 'sections' ? setSections : resource === 'grades' ? setGrades : setSubjects
+    setRows((current) => [...current, created].sort((left, right) => left.title.localeCompare(right.title)))
+  }
+
   return (
     <div className="academic-structure">
-      <button className="team-toggle" type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+      {!standalone ? <button className="team-toggle" type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
         {open ? 'Hide academic structure' : 'View academic structure'}
-      </button>
+      </button> : null}
       {open ? (
         <div className="academic-panel">
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {loading ? <p className="muted-copy" role="status">Loading academic structure…</p> : null}
           {!loading ? (
             <>
-              <section aria-labelledby={`sections-heading-${school.id}`}>
+              <label className="module-search"><span aria-hidden="true">⌕</span><input aria-label={`Search ${activeSection === 'all' ? 'academic records' : activeSection}`} placeholder={`Search ${activeSection === 'all' ? 'sections, grades and subjects' : activeSection}`} value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+              {(activeSection === 'all' || activeSection === 'sections') ? <section aria-labelledby={`sections-heading-${school.id}`}>
                 <div className="academic-section-heading">
                   <h4 id={`sections-heading-${school.id}`}>Sections</h4>
                   <span>{sections.length}</span>
                 </div>
+                <DataTools title="Sections" rows={sections} fields={[{ key: 'title', label: 'title', required: true }, { key: 'status', label: 'status' }]} canImport={canManage} onImport={(row) => importRecord('sections', row)} />
                 {canManage ? (
                   <form className="add-academic-form" onSubmit={createSection}>
                     <label htmlFor={`new-section-${school.id}`}>New section name</label>
@@ -405,19 +341,18 @@ export default function AcademicStructure({ school, canManage }) {
                   </form>
                 ) : null}
                 {sections.length ? (
-                  <ul className="sections-list">
-                    {sections.map((section) => (
-                      <SectionCard key={section.id} schoolId={school.id} section={section} canManage={canManage} onUpdated={updateSection} />
-                    ))}
-                  </ul>
+                  <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Section</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+                    {matchingSections.map((section) => <SectionCard key={section.id} schoolId={school.id} section={section} canManage={canManage} onUpdated={updateSection} />)}
+                  </tbody></table></div>
                 ) : <p className="muted-copy">No sections yet.</p>}
-              </section>
+              </section> : null}
 
-              <section className="grades-section" aria-labelledby={`grades-heading-${school.id}`}>
+              {(activeSection === 'all' || activeSection === 'grades') ? <section className="grades-section" aria-labelledby={`grades-heading-${school.id}`}>
                 <div className="academic-section-heading">
                   <h4 id={`grades-heading-${school.id}`}>Grades</h4>
                   <span>{grades.length}</span>
                 </div>
+                <DataTools title="Grades" rows={grades.map((grade) => ({ ...grade, sections: grade.sections.map((section) => section.title).join('; ') }))} fields={[{ key: 'title', label: 'title', required: true }, { key: 'status', label: 'status' }, { key: 'sections', label: 'sections' }]} canImport={canManage} onImport={(row) => importRecord('grades', row)} />
                 {canManage ? (
                   <form className="add-grade-form" onSubmit={createGrade}>
                     <label htmlFor={`new-grade-${school.id}`}>New grade name</label>
@@ -436,19 +371,18 @@ export default function AcademicStructure({ school, canManage }) {
                   </form>
                 ) : null}
                 {grades.length ? (
-                  <div className="grades-list">
-                    {grades.map((grade) => (
-                      <GradeCard key={grade.id} schoolId={school.id} grade={grade} sections={sections} canManage={canManage} onUpdated={updateGrade} />
-                    ))}
-                  </div>
+                  <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Grade</th><th>Assigned sections</th><th>Actions</th></tr></thead><tbody>
+                    {matchingGrades.map((grade) => <GradeCard key={grade.id} schoolId={school.id} grade={grade} sections={sections} canManage={canManage} onUpdated={updateGrade} />)}
+                  </tbody></table></div>
                 ) : <p className="muted-copy">No grades yet.</p>}
-              </section>
+              </section> : null}
 
-              <section aria-labelledby={`subjects-heading-${school.id}`}>
+              {(activeSection === 'all' || activeSection === 'subjects') ? <section aria-labelledby={`subjects-heading-${school.id}`}>
                 <div className="academic-section-heading">
                   <h4 id={`subjects-heading-${school.id}`}>Subjects</h4>
                   <span>{subjects.length}</span>
                 </div>
+                <DataTools title="Subjects" rows={subjects.map((subject) => ({ ...subject, grades: subject.grades.map((grade) => grade.title).join('; ') }))} fields={[{ key: 'title', label: 'title', required: true }, { key: 'status', label: 'status' }, { key: 'grades', label: 'grades' }]} canImport={canManage} onImport={(row) => importRecord('subjects', row)} />
                 {canManage ? (
                   <form className="add-grade-form" onSubmit={createSubject}>
                     <label htmlFor={`new-subject-${school.id}`}>New subject name</label>
@@ -467,13 +401,11 @@ export default function AcademicStructure({ school, canManage }) {
                   </form>
                 ) : null}
                 {subjects.length ? (
-                  <div className="grades-list">
-                    {subjects.map((subject) => (
-                      <SubjectCard key={subject.id} schoolId={school.id} subject={subject} grades={grades} canManage={canManage} onUpdated={updateSubject} />
-                    ))}
-                  </div>
+                  <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Subject</th><th>Assigned grades</th><th>Actions</th></tr></thead><tbody>
+                    {matchingSubjects.map((subject) => <SubjectCard key={subject.id} schoolId={school.id} subject={subject} grades={grades} canManage={canManage} onUpdated={updateSubject} />)}
+                  </tbody></table></div>
                 ) : <p className="muted-copy">No subjects yet.</p>}
-              </section>
+              </section> : null}
             </>
           ) : null}
         </div>

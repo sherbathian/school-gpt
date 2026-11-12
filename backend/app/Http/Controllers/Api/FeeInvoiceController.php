@@ -21,6 +21,9 @@ class FeeInvoiceController extends Controller
         $validated = $request->validate([
             'academic_year' => ['required', 'string', 'regex:/^\d{4}-\d{4}$/', 'max:20'],
         ]);
+        if ($validated['academic_year'] !== $this->activeAcademicYear($schoolRecord)) {
+            throw ValidationException::withMessages(['academic_year' => ['Fee invoices must use the school’s active academic year.']]);
+        }
         $invoices = $schoolRecord->feeInvoices()
             ->with(['student:id,admission_number,first_name,last_name', 'feeType:id,title', 'payments' => fn ($query) => $query->orderBy('paid_on')->orderBy('id')])
             ->where('academic_year', $validated['academic_year'])
@@ -41,7 +44,10 @@ class FeeInvoiceController extends Controller
             'academic_year' => ['required', 'string', 'regex:/^\d{4}-\d{4}$/', 'max:20'],
             'due_date' => ['sometimes', 'nullable', 'date'],
         ]);
-        $feeType = $schoolRecord->feeTypes()
+        if ($validated['academic_year'] !== $this->activeAcademicYear($schoolRecord)) {
+            throw ValidationException::withMessages(['academic_year' => ['Fee invoices must use the school’s active academic year.']]);
+        }
+        $feeType = $schoolRecord->legacyFeeTypes()
             ->where('status', 'active')
             ->where('academic_year', $validated['academic_year'])
             ->findOrFail($validated['fee_type_id']);
@@ -138,6 +144,16 @@ class FeeInvoiceController extends Controller
         [$whole, $fraction] = array_pad(explode('.', (string) $amount, 2), 2, '');
 
         return ((int) $whole * 100) + (int) str_pad($fraction, 2, '0');
+    }
+
+    private function activeAcademicYear(School $school): string
+    {
+        $session = $school->schoolSessions()->where('is_current', true)->first();
+        if (! $session) {
+            throw ValidationException::withMessages(['academic_year' => ['Set an active academic year before managing fees.']]);
+        }
+
+        return $session->starts_on->format('Y').'-'.$session->ends_on->format('Y');
     }
 
     /** @return array<string, mixed> */

@@ -45,6 +45,32 @@ class StudentEnrollmentTest extends TestCase
             ->assertJsonPath('data.0.current_enrollment.academic_year', '2026-2027');
     }
 
+    public function test_student_admission_saves_erd_profile_and_parent_guardian_details(): void
+    {
+        $school = School::factory()->create();
+        $schoolAdmin = $this->schoolAdminFor($school);
+
+        $this->actingAs($schoolAdmin, 'sanctum')
+            ->postJson('/api/schools/'.$school->id.'/students', [
+                'admission_number' => 'N-ERD-1',
+                'first_name' => 'Amina',
+                'last_name' => 'Khan',
+                'gender' => 'female',
+                'birth_date' => '2016-04-12',
+                'admission_date' => '2026-08-15',
+                'phone' => '03001234567',
+                'address' => 'School town',
+                'guardian' => ['father_name' => 'Imran Khan', 'father_phone' => '03007654321'],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.gender', 'female')
+            ->assertJsonPath('data.guardian.father_name', 'Imran Khan')
+            ->assertJsonPath('data.guardian.father_phone', '03007654321');
+
+        $this->assertDatabaseHas('students', ['admission_number' => 'N-ERD-1', 'address' => 'School town']);
+        $this->assertDatabaseHas('guardians', ['school_id' => $school->id, 'father_name' => 'Imran Khan']);
+    }
+
     public function test_enrollment_requires_a_section_assigned_to_an_active_grade_in_the_same_school(): void
     {
         $school = School::factory()->create();

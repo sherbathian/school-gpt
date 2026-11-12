@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\FeeType;
 use App\Models\Grade;
+use App\Models\LegacyFeeType;
 use App\Models\School;
 use App\Models\Section;
 use App\Models\Student;
@@ -20,7 +20,7 @@ class FeeManagementTest extends TestCase
         $school = School::factory()->create();
         $schoolAdmin = $this->schoolAdminFor($school);
         $feeTypeResponse = $this->actingAs($schoolAdmin, 'sanctum')
-            ->postJson('/api/schools/'.$school->id.'/fee-types', [
+            ->postJson('/api/schools/'.$school->id.'/legacy-fee-types', [
                 'title' => 'Tuition fee',
                 'academic_year' => '2026-2027',
                 'amount' => '125.50',
@@ -58,7 +58,7 @@ class FeeManagementTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.student.admission_number', $student->admission_number);
 
-        $this->patchJson('/api/schools/'.$school->id.'/fee-types/'.$feeTypeId, ['amount' => '150.00'])
+        $this->patchJson('/api/schools/'.$school->id.'/legacy-fee-types/'.$feeTypeId, ['amount' => '150.00'])
             ->assertOk()
             ->assertJsonPath('data.amount', '150.00');
         $this->getJson('/api/schools/'.$school->id.'/fee-invoices?academic_year=2026-2027')
@@ -66,10 +66,10 @@ class FeeManagementTest extends TestCase
         $this->deleteJson('/api/schools/'.$school->id.'/fee-invoices/'.$invoiceId)
             ->assertUnprocessable()
             ->assertJsonValidationErrors('invoice');
-        $this->patchJson('/api/schools/'.$school->id.'/fee-types/'.$feeTypeId, ['status' => 'inactive'])
+        $this->patchJson('/api/schools/'.$school->id.'/legacy-fee-types/'.$feeTypeId, ['status' => 'inactive'])
             ->assertOk()
             ->assertJsonPath('data.status', 'inactive');
-        $this->patchJson('/api/schools/'.$school->id.'/fee-types/'.$feeTypeId, ['status' => 'active'])
+        $this->patchJson('/api/schools/'.$school->id.'/legacy-fee-types/'.$feeTypeId, ['status' => 'active'])
             ->assertOk()
             ->assertJsonPath('data.status', 'active');
     }
@@ -79,7 +79,7 @@ class FeeManagementTest extends TestCase
         $school = School::factory()->create();
         $schoolAdmin = $this->schoolAdminFor($school);
         $student = $this->enrolledStudentFor($school);
-        $feeType = FeeType::factory()->for($school)->create([
+        $feeType = LegacyFeeType::factory()->for($school)->create([
             'title' => 'Books',
             'academic_year' => '2026-2027',
             'amount_cents' => 5000,
@@ -111,7 +111,7 @@ class FeeManagementTest extends TestCase
         $teacher = User::factory()->create();
         $teacher->schools()->attach($school, ['role' => 'teacher']);
         $student = Student::factory()->for($school)->create();
-        $feeType = FeeType::factory()->for($school)->create(['academic_year' => '2026-2027']);
+        $feeType = LegacyFeeType::factory()->for($school)->create(['academic_year' => '2026-2027']);
 
         $this->actingAs($teacher, 'sanctum')
             ->getJson('/api/schools/'.$school->id.'/fee-invoices?academic_year=2026-2027')
@@ -124,7 +124,7 @@ class FeeManagementTest extends TestCase
                 'academic_year' => '2026-2027',
             ])->assertNotFound();
 
-        $this->postJson('/api/schools/'.$school->id.'/fee-types', [
+        $this->postJson('/api/schools/'.$school->id.'/legacy-fee-types', [
             'title' => $feeType->title,
             'academic_year' => '2026-2027',
             'amount' => '25.00',

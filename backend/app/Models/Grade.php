@@ -33,4 +33,9 @@ class Grade extends Model
             ->withPivot('school_id')
             ->withTimestamps();
     }
+
+    public function feeGroups(): BelongsToMany
+    {
+        return $this->belongsToMany(FeeGroup::class, 'fee_group_grade', 'grade_id', 'fee_group_id');
+    }
 }

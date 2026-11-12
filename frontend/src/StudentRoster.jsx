@@ -56,7 +56,7 @@ function fieldLabel(key) {
   return key.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-export default function StudentRoster({ school, canManage, canTakeAttendance, expanded = false, attendanceOnly = false, standalone = false }) {
+export default function StudentRoster({ school, canManage, canTakeAttendance, expanded = false, attendanceOnly = false, standalone = false, selectedStudentId = null, onOpenStudent, onCloseStudent }) {
   const [open, setOpen] = useState(expanded)
   const [loaded, setLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -122,6 +122,26 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
     loadRoster()
     return () => controller.abort()
   }, [open, loaded, school.id, academicYear])
+
+  useEffect(() => {
+    if (!selectedStudentId) {
+      setDetailStudent(null)
+      setDetailFees([])
+      return undefined
+    }
+    const controller = new AbortController()
+    setDetailLoading(true)
+    setError('')
+    apiRequest(`/api/schools/${school.id}/students/${selectedStudentId}`, { signal: controller.signal })
+      .then(readData)
+      .then((detail) => {
+        setDetailStudent(detail)
+        setDetailFees(detail.fee_history || [])
+      })
+      .catch((detailError) => { if (!controller.signal.aborted) setError(detailError.message) })
+      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false) })
+    return () => controller.abort()
+  }, [selectedStudentId, school.id])
 
   const selectedGrade = grades.find((grade) => String(grade.id) === gradeId)
   const availableSections = selectedGrade?.sections.filter((section) => section.status === 'active') || []
@@ -352,6 +372,22 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
             <h4>Students</h4>
             <span>{visibleStudents.length}</span>
           </div>
+          {selectedStudentId ? <section className="student-profile-page" aria-label="Student profile">
+            <button className="quiet-button student-back-button" type="button" onClick={onCloseStudent}>← Back to students</button>
+            {detailLoading ? <p className="muted-copy" role="status">Loading student profile…</p> : null}
+            {error ? <p className="form-error" role="alert">{error}</p> : null}
+            {!detailLoading && detailStudent ? <>
+              <header className="student-profile-hero">
+                {detailStudent.photo_path ? <img className="student-profile-photo" src={`/storage/${detailStudent.photo_path}`} alt={`${detailStudent.first_name} ${detailStudent.last_name}`} /> : <span className="student-profile-photo student-profile-initials">{detailStudent.first_name?.[0]}{detailStudent.last_name?.[0]}</span>}
+                <div><p className="eyebrow">Student profile</p><h3>{detailStudent.last_name}, {detailStudent.first_name}</h3><p>{detailStudent.admission_number} <span>·</span> {fieldLabel(detailStudent.status)}</p></div>
+                <div className="student-profile-actions"><span className="active-year-label">Current session <strong>{academicYear}</strong></span></div>
+              </header>
+              <div className="student-detail-grid"><section><h5>Student information</h5><dl>{studentProfileFields.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{detailStudent[key] || '—'}</dd></div>)}<div><dt>Photo</dt><dd>{detailStudent.photo_path ? <a href={`/storage/${detailStudent.photo_path}`} target="_blank" rel="noreferrer">View photo</a> : '—'}</dd></div><div><dt>B-Form document</dt><dd>{detailStudent.b_form_document_path ? <a href={`/storage/${detailStudent.b_form_document_path}`} target="_blank" rel="noreferrer">Open document</a> : '—'}</dd></div></dl></section>
+                <section><h5>Parent and guardian</h5><dl>{[...guardianFields, 'is_guardian_other'].map((key) => <div key={key}><dt>{fieldLabel(key)}</dt><dd>{detailStudent.guardian?.[key] != null ? String(detailStudent.guardian[key]) : '—'}</dd></div>)}</dl></section>
+                <section className="student-enrollment-history"><h5>Enrollment history</h5>{detailStudent.enrollments.length ? <div className="student-history-list">{detailStudent.enrollments.map((enrollment) => <div key={enrollment.id}><strong>{enrollment.grade.title} · {enrollment.section.title}</strong><span>{enrollment.academic_year} · {fieldLabel(enrollment.status)}</span></div>)}</div> : <p className="muted-copy">No enrollment history.</p>}</section></div>
+              {canManage ? <section className="student-fee-history"><h5>Fee history</h5>{detailFees.length ? <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Fee item</th><th>Academic year / month</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>{detailFees.map((fee) => <tr key={`${fee.kind}-${fee.id}`}><td>{fee.fee_type}<small>{fee.kind === 'monthly' ? 'Monthly charge' : 'Invoice'}</small></td><td>{fee.billing_month || fee.academic_year}</td><td>{fee.due_date || '—'}</td><td>{fee.amount}</td><td>{fee.amount_paid || '0.00'}</td><td>{fee.balance}</td><td><span className={`fee-status fee-status-${fee.status}`}>{fieldLabel(fee.status)}</span></td></tr>)}</tbody></table></div> : <p className="muted-copy">No fee records are linked to this student yet.</p>}</section> : null}
+            </> : null}
+          </section> : <>
           <DataTools title="Students" rows={students.map((student) => {
             const enrollment = enrollmentForYear(student)
             return { ...student, ...Object.fromEntries(Object.entries(student.guardian || {}).map(([key, value]) => [`guardian_${key}`, value])), grade: enrollment?.grade?.title || '', section: enrollment?.section?.title || '', academic_year: enrollment?.academic_year || '', enrollment_history: student.enrollments.map((item) => `${item.academic_year}: ${item.grade.title} / ${item.section.title} (${item.status})`).join(' | ') }
@@ -388,7 +424,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                     <td>{student.phone || '—'}<small>{student.email || 'No email on file'}</small></td>
                     <td>{displayedEnrollment ? `${displayedEnrollment.grade.title} · ${displayedEnrollment.section.title}` : student.status === 'active' ? 'Not enrolled this year' : 'Archived'}<small>{displayedEnrollment?.academic_year || ''}{displayedEnrollment ? ` · ${displayedEnrollment.status}` : ''}</small></td>
                     <td><div className="academic-actions">
-                      <button className="quiet-button" type="button" aria-expanded={detailStudentId === student.id} onClick={() => toggleStudentDetails(student)}>{detailStudentId === student.id ? 'Hide details' : 'Details'}</button>
+                      <button className="quiet-button" type="button" onClick={() => onOpenStudent?.(student)}>View profile</button>
                       {canManage ? <>
                       <button className="quiet-button" type="button" onClick={() => {
                         setEditStudentForm(studentEditValues(student))
@@ -527,6 +563,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
               ) : null}
             </>
           ) : null}
+          </>}
         </div>
       ) : null}
     </div>

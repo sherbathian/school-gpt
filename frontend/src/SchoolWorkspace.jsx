@@ -17,7 +17,7 @@ async function readData(response) {
   return result.data
 }
 
-function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange, onNavigate, activeModule = 'schools' }) {
+function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange, onNavigate, activeStudentId, onOpenStudent, onCloseStudent, activeModule = 'schools' }) {
   const canManageUsers = user.is_super_admin || school.role === 'school_admin'
   const canTakeAttendance = user.is_super_admin || ['school_admin', 'teacher'].includes(school.role)
   const [editing, setEditing] = useState(false)
@@ -220,7 +220,7 @@ function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange
       {activeModule.startsWith('academic-') && activeModule !== 'academic-years' ? <AcademicStructure school={school} canManage={canManageUsers} expanded standalone activeSection={activeModule.replace('academic-', '')} /> : null}
       {activeModule === 'academic-years' ? <SchoolSessions school={school} canManage={canManageUsers} onCurrentChange={onActiveSessionChange} /> : null}
       {activeModule.startsWith('staff-') ? <StaffManagement school={school} canManage={canManageUsers} activeView={activeModule} onNavigate={onNavigate} /> : null}
-      {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded standalone /> : null}
+      {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded standalone selectedStudentId={activeStudentId} onOpenStudent={onOpenStudent} onCloseStudent={onCloseStudent} /> : null}
       {activeModule === 'attendance' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded attendanceOnly standalone /> : null}
       {['fees-catalog', 'fees-discounts', 'fees-groups', 'fees-masters'].includes(activeModule) && canManageUsers ? <FeeSetup school={school} activeSection={activeModule.replace('fees-', '') === 'catalog' ? 'fee-types' : activeModule.replace('fees-', '')} /> : null}
       {['fee-items', 'invoices'].includes(activeModule) && canManageUsers ? <FeeManagement school={school} expanded standalone activeView={activeModule} /> : null}
@@ -238,6 +238,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [activeModule, setActiveModule] = useState('overview')
+  const [activeStudentId, setActiveStudentId] = useState(null)
   const [selectedSchoolId, setSelectedSchoolId] = useState('')
   const [sidebarSessions, setSidebarSessions] = useState([])
   const [sessionBusy, setSessionBusy] = useState(false)
@@ -385,7 +386,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
           {navGroups.map((group) => <div className="dashboard-nav-group" key={group.title}>
             <p className="sidebar-label">{group.title}</p>
             {group.items.map(([key, icon, label]) => (
-              <button key={key} className={activeModule === key ? 'active' : ''} type="button" aria-current={activeModule === key ? 'page' : undefined} onClick={() => setActiveModule(key)}>
+              <button key={key} className={activeModule === key ? 'active' : ''} type="button" aria-current={activeModule === key ? 'page' : undefined} onClick={() => { setActiveStudentId(null); setActiveModule(key) }}>
                 <span>{icon}</span>{label}{key === 'schools' ? <b>{schools.length}</b> : null}
               </button>
             ))}
@@ -451,7 +452,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
               school={school}
               user={user}
               activeModule={activeModule}
-              onNavigate={setActiveModule}
+              onNavigate={(module) => { setActiveStudentId(null); setActiveModule(module) }}
               onUpdated={updateSchool}
               onArchived={(id) => setSchools((current) => current.filter((item) => item.id !== id))}
             />
@@ -460,7 +461,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
       </div> : null}
       {activeModule !== 'overview' && activeModule !== 'schools' ? (
         schools.find((school) => String(school.id) === activeSchoolId)
-          ? <div className="active-module-page"><SchoolCard key={`${activeSchoolId}-${activeModule}-${activeSchool?.active_session?.id || 'no-session'}`} school={schools.find((school) => String(school.id) === activeSchoolId)} user={user} onUpdated={updateSchool} onActiveSessionChange={(session) => applyCurrentSession(activeSchoolId, session)} onArchived={(id) => { setSchools((current) => current.filter((item) => item.id !== id)); setActiveModule('schools') }} onNavigate={setActiveModule} activeModule={activeModule} /></div>
+          ? <div className="active-module-page"><SchoolCard key={`${activeSchoolId}-${activeModule}-${activeSchool?.active_session?.id || 'no-session'}`} school={schools.find((school) => String(school.id) === activeSchoolId)} user={user} onUpdated={updateSchool} onActiveSessionChange={(session) => applyCurrentSession(activeSchoolId, session)} onArchived={(id) => { setSchools((current) => current.filter((item) => item.id !== id)); setActiveModule('schools') }} onNavigate={(module) => { setActiveStudentId(null); setActiveModule(module) }} activeModule={activeModule} activeStudentId={activeStudentId} onOpenStudent={(student) => setActiveStudentId(student.id)} onCloseStudent={() => setActiveStudentId(null)} /></div>
           : <p className="empty-memberships">{loading ? 'Loading schools…' : 'Add or select a school to open this module.'}</p>
       ) : null}
       </div>

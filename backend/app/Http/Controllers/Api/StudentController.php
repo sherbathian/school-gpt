@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -94,6 +95,20 @@ class StudentController extends Controller
         $schoolRecord = $this->accessibleSchool($request, $school, 'view');
         $studentRecord = $schoolRecord->students()->with('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title')->findOrFail($student);
         $data = $this->studentData($studentRecord);
+        if ($studentRecord->photo_path) {
+            $data['photo_url'] = URL::temporarySignedRoute('students.media', now()->addMinutes(30), [
+                'school' => $schoolRecord->id,
+                'student' => $studentRecord->id,
+                'kind' => 'photo',
+            ], absolute: false);
+        }
+        if ($studentRecord->b_form_document_path) {
+            $data['b_form_document_url'] = URL::temporarySignedRoute('students.media', now()->addMinutes(30), [
+                'school' => $schoolRecord->id,
+                'student' => $studentRecord->id,
+                'kind' => 'document',
+            ], absolute: false);
+        }
         if (Gate::allows('manage', $schoolRecord)) {
             $data['fee_history'] = $this->feeHistory($studentRecord);
         }
@@ -101,10 +116,9 @@ class StudentController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    public function media(Request $request, int $school, int $student, string $kind): StreamedResponse
+    public function media(int $school, int $student, string $kind): StreamedResponse
     {
-        $schoolRecord = $this->accessibleSchool($request, $school, 'view');
-        $studentRecord = $schoolRecord->students()->findOrFail($student);
+        $studentRecord = School::query()->findOrFail($school)->students()->findOrFail($student);
         $path = match ($kind) {
             'photo' => $studentRecord->photo_path,
             'document' => $studentRecord->b_form_document_path,

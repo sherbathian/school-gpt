@@ -8,6 +8,7 @@ import FeeSetup from './FeeSetup.jsx'
 import SchoolSessions from './SchoolSessions.jsx'
 import StaffManagement from './StaffManagement.jsx'
 import GuardianManagement from './GuardianManagement.jsx'
+import StudentInquiries from './StudentInquiries.jsx'
 import DataTools from './DataTools.jsx'
 
 async function readData(response) {
@@ -19,7 +20,7 @@ async function readData(response) {
   return result.data
 }
 
-function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange, onNavigate, activeStudentId, onOpenStudent, onCloseStudent, activeModule = 'schools' }) {
+function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange, onNavigate, onStartAdmission, activeStudentId, onOpenStudent, onCloseStudent, admissionSeed, onAdmissionComplete, onAdmissionCancel, activeModule = 'schools' }) {
   const canManageUsers = user.is_super_admin || school.role === 'school_admin'
   const canTakeAttendance = user.is_super_admin || ['school_admin', 'teacher'].includes(school.role)
   const [editing, setEditing] = useState(false)
@@ -222,7 +223,8 @@ function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange
       {activeModule.startsWith('academic-') && activeModule !== 'academic-years' ? <AcademicStructure school={school} canManage={canManageUsers} expanded standalone activeSection={activeModule.replace('academic-', '')} /> : null}
       {activeModule === 'academic-years' ? <SchoolSessions school={school} canManage={canManageUsers} onCurrentChange={onActiveSessionChange} /> : null}
       {activeModule.startsWith('staff-') ? <StaffManagement school={school} canManage={canManageUsers} activeView={activeModule} onNavigate={onNavigate} /> : null}
-      {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded standalone selectedStudentId={activeStudentId} onOpenStudent={onOpenStudent} onCloseStudent={onCloseStudent} onNavigate={onNavigate} /> : null}
+      {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded standalone selectedStudentId={activeStudentId} onOpenStudent={onOpenStudent} onCloseStudent={onCloseStudent} onNavigate={onNavigate} admissionSeed={admissionSeed} onAdmissionComplete={onAdmissionComplete} onAdmissionCancel={onAdmissionCancel} /> : null}
+      {activeModule === 'student-inquiries' ? <StudentInquiries school={school} canManage={canManageUsers} onStartAdmission={onStartAdmission} /> : null}
       {activeModule === 'guardians' ? <GuardianManagement school={school} canManage={canManageUsers} onNavigate={onNavigate} onOpenStudent={onOpenStudent} /> : null}
       {activeModule === 'attendance' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded attendanceOnly standalone /> : null}
       {['fees-catalog', 'fees-discounts', 'fees-groups', 'fees-masters'].includes(activeModule) && canManageUsers ? <FeeSetup school={school} activeSection={activeModule.replace('fees-', '') === 'catalog' ? 'fee-types' : activeModule.replace('fees-', '')} /> : null}
@@ -243,10 +245,26 @@ export default function SchoolWorkspace({ user, onLogout }) {
   const [busy, setBusy] = useState(false)
   const [activeModule, setActiveModule] = useState('overview')
   const [activeStudentId, setActiveStudentId] = useState(null)
+  const [admissionSeed, setAdmissionSeed] = useState(null)
   const [selectedSchoolId, setSelectedSchoolId] = useState('')
   const [sidebarSessions, setSidebarSessions] = useState([])
   const [sessionBusy, setSessionBusy] = useState(false)
   const [sessionError, setSessionError] = useState('')
+
+  function startInquiryAdmission(inquiry) {
+    setAdmissionSeed(inquiry)
+    setActiveStudentId(null)
+    setActiveModule('students')
+  }
+
+  async function completeInquiryAdmission(inquiry, student) {
+    if (!inquiry || !student) return
+    await readData(await apiRequest(`/api/schools/${inquiry.school_id || selectedSchoolId || activeSchoolId}/student-inquiries/${inquiry.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'registered', student_id: student.id }),
+    }))
+    setAdmissionSeed(null)
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -358,7 +376,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
   const canManageSchool = user.is_super_admin || activeSchool?.role === 'school_admin'
   const navGroups = [
     { title: 'GENERAL', items: [['overview', '▦', 'Overview'], ['schools', '⌂', 'Schools']] },
-    { title: 'STUDENTS', items: [['students', '♧', 'Students'], ['attendance', '✓', 'Attendance']] },
+    { title: 'STUDENTS', items: [['students', '♧', 'Students'], ['student-inquiries', '▣', 'Inquiries & admissions'], ['attendance', '✓', 'Attendance']] },
     { title: 'GUARDIANS', items: [['guardians', '♙', 'Guardians']] },
     { title: 'ACADEMICS', items: [['academic-sections', '▤', 'Sections'], ['academic-grades', '▤', 'Grades'], ['academic-subjects', '◈', 'Subjects'], ['academic-years', '◷', 'Academic years']] },
     { title: 'FINANCE', items: [['fees-catalog', '＄', 'Fee catalog'], ['fees-discounts', '%', 'Discounts'], ['fees-groups', '▣', 'Fee groups'], ['fees-masters', '▤', 'Fee masters'], ['fee-items', '＋', 'Invoice fee items'], ['invoices', '▧', 'Invoices & payments'], ['expense-heads', '▤', 'Expense heads'], ['expense-add', '＋', 'Add expense'], ['expense-search', '⌕', 'Search expenses']] },
@@ -367,6 +385,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
     ...group,
     items: group.items.filter(([key]) => {
       if (key.startsWith('fees-') || key === 'fee-items' || key === 'invoices' || key.startsWith('expense-')) return canManageSchool
+      if (key === 'student-inquiries') return canManageSchool
       if (['staff-create', 'staff-designations', 'staff-departments', 'staff-leave-types'].includes(key)) return canManageSchool
       return true
     }),
@@ -467,7 +486,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
       </div> : null}
       {activeModule !== 'overview' && activeModule !== 'schools' ? (
         schools.find((school) => String(school.id) === activeSchoolId)
-          ? <div className="active-module-page"><SchoolCard key={`${activeSchoolId}-${activeModule}-${activeSchool?.active_session?.id || 'no-session'}`} school={schools.find((school) => String(school.id) === activeSchoolId)} user={user} onUpdated={updateSchool} onActiveSessionChange={(session) => applyCurrentSession(activeSchoolId, session)} onArchived={(id) => { setSchools((current) => current.filter((item) => item.id !== id)); setActiveModule('schools') }} onNavigate={(module) => { setActiveStudentId(null); setActiveModule(module) }} activeModule={activeModule} activeStudentId={activeStudentId} onOpenStudent={(student) => setActiveStudentId(student.id)} onCloseStudent={() => setActiveStudentId(null)} /></div>
+          ? <div className="active-module-page"><SchoolCard key={`${activeSchoolId}-${activeModule}-${activeSchool?.active_session?.id || 'no-session'}`} school={schools.find((school) => String(school.id) === activeSchoolId)} user={user} onUpdated={updateSchool} onActiveSessionChange={(session) => applyCurrentSession(activeSchoolId, session)} onArchived={(id) => { setSchools((current) => current.filter((item) => item.id !== id)); setActiveModule('schools') }} onNavigate={(module) => { setActiveStudentId(null); setActiveModule(module) }} onStartAdmission={startInquiryAdmission} activeModule={activeModule} activeStudentId={activeStudentId} admissionSeed={admissionSeed} onAdmissionComplete={completeInquiryAdmission} onAdmissionCancel={() => setAdmissionSeed(null)} onOpenStudent={(student) => student && setActiveStudentId(student.id)} onCloseStudent={() => setActiveStudentId(null)} /></div>
           : <p className="empty-memberships">{loading ? 'Loading schools…' : 'Add or select a school to open this module.'}</p>
       ) : null}
       </div>

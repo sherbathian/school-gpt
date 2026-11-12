@@ -29,7 +29,7 @@ class StudentController extends Controller
             'academic_year' => ['sometimes', 'string', 'regex:/^\d{4}-\d{4}$/', 'max:20'],
         ]);
         $studentsQuery = $schoolRecord->students()
-            ->with('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title')
+            ->with('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title', 'lifecycleEvents')
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -88,13 +88,13 @@ class StudentController extends Controller
             return $schoolRecord->students()->create($validated);
         });
 
-        return response()->json(['data' => $this->studentData($student->load('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title'))], 201);
+        return response()->json(['data' => $this->studentData($student->load('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title', 'lifecycleEvents'))], 201);
     }
 
     public function show(Request $request, int $school, int $student): JsonResponse
     {
         $schoolRecord = $this->accessibleSchool($request, $school, 'view');
-        $studentRecord = $schoolRecord->students()->with('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title')->findOrFail($student);
+        $studentRecord = $schoolRecord->students()->with('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title', 'lifecycleEvents')->findOrFail($student);
         $data = $this->studentData($studentRecord);
         if ($studentRecord->photo_path) {
             $data['photo_url'] = URL::temporarySignedRoute('students.media', now()->addMinutes(30), [
@@ -185,7 +185,7 @@ class StudentController extends Controller
         }
         $studentRecord->update($validated);
 
-        return response()->json(['data' => $this->studentData($studentRecord->load('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title'))]);
+        return response()->json(['data' => $this->studentData($studentRecord->load('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title', 'lifecycleEvents'))]);
     }
 
     public function destroy(Request $request, int $school, int $student): JsonResponse
@@ -261,6 +261,54 @@ class StudentController extends Controller
         return response()->json(['data' => $this->enrollmentData($enrollment)], 201);
     }
 
+    public function withdraw(Request $request, int $school, int $student): JsonResponse
+    {
+        $schoolRecord = $this->accessibleSchool($request, $school, 'manage');
+        $studentRecord = $schoolRecord->students()->where('status', 'active')->findOrFail($student);
+        $validated = $request->validate(['event_date' => ['required', 'date'], 'reason' => ['nullable', 'string', 'max:2000']]);
+
+        DB::transaction(function () use ($studentRecord, $schoolRecord, $validated): void {
+            $studentRecord->update(['status' => 'leave', 'leave_date' => $validated['event_date']]);
+            $studentRecord->enrollments()->where('status', 'active')->update(['status' => 'withdrawn', 'ended_on' => $validated['event_date']]);
+            $studentRecord->lifecycleEvents()->create(['school_id' => $schoolRecord->id, 'event_type' => 'withdrawal', 'event_date' => $validated['event_date'], 'reason' => $validated['reason'] ?? null]);
+        });
+
+        return response()->json(['data' => $this->studentData($studentRecord->refresh()->load('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title', 'lifecycleEvents'))]);
+    }
+
+    public function rejoin(Request $request, int $school, int $student): JsonResponse
+    {
+        $schoolRecord = $this->accessibleSchool($request, $school, 'manage');
+        $studentRecord = $schoolRecord->students()->whereIn('status', ['leave', 'inactive'])->findOrFail($student);
+        $validated = $request->validate(['grade_id' => ['required', 'integer'], 'section_id' => ['required', 'integer'], 'event_date' => ['required', 'date'], 'reason' => ['nullable', 'string', 'max:2000']]);
+        $activeSession = $schoolRecord->schoolSessions()->where('is_current', true)->first();
+        if (! $activeSession) {
+            throw ValidationException::withMessages(['academic_year' => ['Set an active academic year before rejoining a student.']]);
+        }
+        $academicYear = $activeSession->starts_on->format('Y').'-'.$activeSession->ends_on->format('Y');
+        $isAssignedActiveClass = DB::table('grade_section')
+            ->join('grades', fn ($join) => $join->on('grades.id', '=', 'grade_section.grade_id')->on('grades.school_id', '=', 'grade_section.school_id'))
+            ->join('sections', fn ($join) => $join->on('sections.id', '=', 'grade_section.section_id')->on('sections.school_id', '=', 'grade_section.school_id'))
+            ->where('grade_section.school_id', $schoolRecord->id)
+            ->where('grade_section.grade_id', $validated['grade_id'])
+            ->where('grade_section.section_id', $validated['section_id'])
+            ->where('grades.status', 'active')->where('sections.status', 'active')->exists();
+        if (! $isAssignedActiveClass) {
+            throw ValidationException::withMessages(['section_id' => ['Choose an active section assigned to the selected grade.']]);
+        }
+
+        $enrollment = DB::transaction(function () use ($studentRecord, $schoolRecord, $validated, $academicYear): Enrollment {
+            $studentRecord = Student::query()->whereKey($studentRecord->id)->lockForUpdate()->firstOrFail();
+            $studentRecord->enrollments()->where('status', 'active')->update(['status' => 'completed', 'ended_on' => CarbonImmutable::parse($validated['event_date'])->subDay()->toDateString()]);
+            $studentRecord->update(['status' => 'active', 'leave_date' => null]);
+            $studentRecord->lifecycleEvents()->create(['school_id' => $schoolRecord->id, 'event_type' => 'rejoining', 'event_date' => $validated['event_date'], 'reason' => $validated['reason'] ?? null]);
+
+            return $studentRecord->enrollments()->create(['school_id' => $schoolRecord->id, 'grade_id' => $validated['grade_id'], 'section_id' => $validated['section_id'], 'academic_year' => $academicYear, 'status' => 'active', 'enrolled_on' => $validated['event_date']])->load('grade:id,title', 'section:id,title');
+        });
+
+        return response()->json(['data' => $this->enrollmentData($enrollment)], 201);
+    }
+
     private function accessibleSchool(Request $request, int $school, string $ability): School
     {
         $schools = $request->user()->isSuperAdmin() ? School::query() : $request->user()->activeSchools();
@@ -299,6 +347,7 @@ class StudentController extends Controller
             'guardian' => $student->guardian?->only(['id', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address']),
             'current_enrollment' => $currentEnrollment ? $this->enrollmentData($currentEnrollment) : null,
             'enrollments' => $enrollments->map(fn (Enrollment $enrollment) => $this->enrollmentData($enrollment))->all(),
+            'lifecycle_events' => $student->lifecycleEvents->sortByDesc('event_date')->values()->map(fn ($event): array => ['id' => $event->id, 'event_type' => $event->event_type, 'event_date' => $event->event_date->toDateString(), 'reason' => $event->reason])->all(),
         ];
     }
 

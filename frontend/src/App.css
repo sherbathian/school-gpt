@@ -541,13 +541,17 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
 .student-roster-table { min-width: 900px; table-layout: fixed; }
 .student-sort-button { display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; cursor: pointer; }
 .student-sort-button span { color: #a0a8b8; }
-.student-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 4px; color: #79849a; font-size: 13px; }
-.student-pagination label { display: flex; align-items: center; gap: 7px; }
+.student-pagination { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 17px 5px 3px; color: #79849a; font-size: 13px; }
+.student-pagination-count { white-space: nowrap; }
+.student-pagination-count strong { color: #46516a; font-weight: 700; }
+.student-pagination .student-pagination-size { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .student-pagination select { min-height: 34px; padding: 4px 7px; border: 1px solid #e1e5ed; border-radius: 7px; background: white; color: #46516a; }
-.student-pagination nav { display: flex; gap: 4px; }
-.student-pagination nav button { min-width: 31px; height: 31px; border: 1px solid #e4e7ef; border-radius: 7px; background: white; color: #59647c; cursor: pointer; }
+.student-pagination nav { min-width: 0; display: flex; align-items: center; gap: 5px; }
+.student-pagination nav button { min-width: 34px; height: 34px; padding: 0 8px; border: 1px solid #e4e7ef; border-radius: 8px; background: white; color: #59647c; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.student-pagination nav button:not(:disabled):hover { border-color: #ccd3f5; background: #f4f5ff; color: #5267d5; }
 .student-pagination nav button.active { border-color: #586bd6; background: #586bd6; color: #fff; }
 .student-pagination nav button:disabled { opacity: .45; cursor: not-allowed; }
+.student-pagination-ellipsis { min-width: 18px; color: #99a2b4; text-align: center; }
 .student-roster-table .student-column { width: 25%; }
 .student-roster-table .contact-column { width: 23%; }
 .student-roster-table .enrollment-column { width: 25%; }
@@ -787,4 +791,44 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
 .expense-success { margin: 0; padding: 11px 14px; border: 1px solid #d5eadc; border-radius: 8px; background: #f3fbf5; color: #31724a; font-size: 14px; }
 @media (max-width: 1000px) { .expense-two-column, .expense-add-layout { grid-template-columns: 1fr; } }
 @media (max-width: 650px) { .expense-criteria-grid { grid-template-columns: 1fr; padding: 15px; } .expense-search-wide { grid-column: auto; } .expense-table-footer { align-items: flex-start; flex-direction: column; } .expense-table-footer nav { align-self: flex-end; } .expense-report-heading { align-items: flex-start; flex-direction: column; } }
-@media (max-width: 650px) { .student-pagination { align-items: flex-start; flex-direction: column; } .student-pagination nav { align-self: flex-end; } }
+@media (max-width: 760px) { .student-pagination { grid-template-columns: 1fr auto; } .student-pagination-count { grid-column: 1 / -1; } .student-pagination nav { justify-self: end; } }
+@media (max-width: 440px) { .student-pagination { grid-template-columns: 1fr; gap: 10px; } .student-pagination-count { grid-column: auto; } .student-pagination nav { justify-self: start; max-width: 100%; } .student-pagination nav button { min-width: 31px; height: 32px; } }
+.student-navigator-count { flex: 0 0 auto; color: #8791a6; font-size: 13px; white-space: nowrap; }
+.student-lifecycle-history { grid-column: 1 / -1; min-width: 0; padding: 18px; border: 1px solid #e9edf4; border-radius: 11px; background: #fff; }
+.student-lifecycle-history h5 { margin: 0 0 13px; color: #35415c; font-size: 15px; }
+.student-lifecycle-form { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); align-items: end; gap: 12px; margin: 12px; padding: 18px; border: 1px solid #e8ebf2; border-radius: 11px; background: #fff; }
+.student-lifecycle-form > div:first-child { grid-column: 1 / -1; }
+.student-lifecycle-form h4 { margin: 2px 0 4px; color: #35415c; font-size: 17px; }
+.student-lifecycle-form p { margin: 0; color: #8993a8; font-size: 13px; }
+.student-lifecycle-form > label { min-width: 0; display: grid; gap: 6px; color: #59647c; font-size: 13px; font-weight: 650; }
+.student-lifecycle-form input, .student-lifecycle-form select, .student-lifecycle-form textarea { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #dfe4ef; border-radius: 7px; background: #fff; color: #303a54; font: inherit; }
+.student-lifecycle-form .lifecycle-reason { grid-column: span 2; }
+.student-lifecycle-form .student-form-actions { grid-column: 1 / -1; margin: 0; }
+.inquiry-module { display: grid; gap: 16px; }
+.inquiry-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.inquiry-heading h2 { margin: 3px 0; color: #303a54; font-size: 23px; }
+.inquiry-heading p:not(.eyebrow) { margin: 0; color: #8993a8; font-size: 14px; }
+.inquiry-heading .eyebrow { margin: 0; color: #6575d5; font-size: 11px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.inquiry-form { display: grid; gap: 17px; padding: 21px; border: 1px solid #e8ebf2; border-radius: 11px; background: white; }
+.inquiry-form > header h3 { margin: 0; color: #35415c; font-size: 18px; }
+.inquiry-form > header p { margin: 5px 0 0; color: #8993a8; font-size: 13px; }
+.inquiry-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.inquiry-form-grid > label { min-width: 0; display: grid; gap: 6px; color: #59647c; font-size: 13px; font-weight: 650; }
+.inquiry-form-grid input, .inquiry-form-grid select, .inquiry-form-grid textarea { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #dfe4ef; border-radius: 7px; background: white; color: #303a54; font: inherit; font-size: 14px; }
+.inquiry-form-grid .inquiry-wide { grid-column: 1 / -1; }
+.inquiry-toolbar { display: flex; align-items: center; gap: 12px; }
+.inquiry-toolbar .module-search { flex: 1; }
+.inquiry-toolbar > span { color: #8993a8; font-size: 13px; white-space: nowrap; }
+.inquiry-table { min-width: 900px; }
+.inquiry-table td strong { display: block; color: #35415c; }
+.inquiry-table td small { display: block; margin-top: 4px; color: #8993a8; }
+.inquiry-status { display: inline-flex; padding: 5px 9px; border-radius: 99px; background: #f2f4f8; color: #66718c; font-size: 12px; font-weight: 700; text-transform: capitalize; white-space: nowrap; }
+.inquiry-status-new { background: #eef2ff; color: #596bd4; }
+.inquiry-status-contacted, .inquiry-status-visit_scheduled { background: #fff4e5; color: #a76b19; }
+.inquiry-status-registered { background: #eaf7ee; color: #33794a; }
+.inquiry-status-rejected { background: #fff0ee; color: #b65e51; }
+.inquiry-admit-action { min-height: 32px; padding: 5px 9px; border: 1px solid #dde3f5; border-radius: 7px; background: #fff; color: #566ace; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.inquiry-page-item { display: inline-flex; align-items: center; gap: 4px; }
+.inquiry-page-item i { color: #9aa3b5; font-style: normal; }
+@media (max-width: 760px) { .inquiry-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .student-lifecycle-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .student-lifecycle-form .lifecycle-reason { grid-column: 1 / -1; } }
+@media (max-width: 580px) { .inquiry-heading { align-items: flex-start; flex-direction: column; } .inquiry-form-grid { grid-template-columns: 1fr; } .inquiry-form-grid .inquiry-wide { grid-column: auto; } .inquiry-toolbar { align-items: stretch; flex-direction: column; } .student-lifecycle-form { grid-template-columns: 1fr; } .student-lifecycle-form .lifecycle-reason { grid-column: auto; } .student-lifecycle-form > div:first-child, .student-lifecycle-form .student-form-actions { grid-column: auto; } }

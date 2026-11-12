@@ -58,7 +58,7 @@ function fieldLabel(key) {
   return key.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-export default function StudentRoster({ school, canManage, canTakeAttendance, expanded = false, attendanceOnly = false, standalone = false, selectedStudentId = null, onOpenStudent, onCloseStudent, onNavigate }) {
+export default function StudentRoster({ school, canManage, canTakeAttendance, expanded = false, attendanceOnly = false, standalone = false, selectedStudentId = null, onOpenStudent, onCloseStudent, onNavigate, admissionSeed = null, onAdmissionComplete, onAdmissionCancel }) {
   const [open, setOpen] = useState(expanded)
   const [loaded, setLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -77,6 +77,10 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const [studentPageSize, setStudentPageSize] = useState(10)
   const [studentSort, setStudentSort] = useState({ key: 'student_name', direction: 'asc' })
   const [activeStudentId, setActiveStudentId] = useState(null)
+  const [lifecycleStudentId, setLifecycleStudentId] = useState(null)
+  const [lifecycleMode, setLifecycleMode] = useState('withdraw')
+  const [lifecycleDate, setLifecycleDate] = useState(todayDate())
+  const [lifecycleReason, setLifecycleReason] = useState('')
   const [editingStudentId, setEditingStudentId] = useState(null)
   const [editStudentForm, setEditStudentForm] = useState(null)
   const [editPhotoFile, setEditPhotoFile] = useState(null)
@@ -100,6 +104,11 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const [attendanceLoading, setAttendanceLoading] = useState(false)
   const [attendanceSaving, setAttendanceSaving] = useState(false)
   const [error, setError] = useState('')
+  useEffect(() => {
+    if (!admissionSeed) return
+    setStudentForm((current) => ({ ...current, first_name: admissionSeed.first_name || '', last_name: admissionSeed.last_name || '' }))
+    setShowStudentForm(true)
+  }, [admissionSeed?.id])
   useEffect(() => {
     if (!open || loaded) return undefined
     const controller = new AbortController()
@@ -155,7 +164,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const availableSections = selectedGrade?.sections.filter((section) => section.status === 'active') || []
   const attendanceGrade = grades.find((grade) => String(grade.id) === attendanceGradeId)
   const attendanceSections = attendanceGrade?.sections.filter((section) => section.status === 'active') || []
-  const filteredStudents = students.filter((student) => `${student.admission_number} ${student.first_name} ${student.last_name} ${student.phone || ''} ${student.email || ''} ${student.current_enrollment?.grade?.title || ''} ${student.current_enrollment?.section?.title || ''}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const filteredStudents = students.filter((student) => `${student.admission_number} ${student.first_name} ${student.last_name} ${student.phone || ''} ${student.email || ''} ${student.status || ''} ${student.guardian?.father_name || ''} ${student.guardian?.mother_name || ''} ${student.guardian?.father_phone || ''} ${student.guardian?.mother_phone || ''} ${student.current_enrollment?.grade?.title || ''} ${student.current_enrollment?.section?.title || ''}`.toLowerCase().includes(search.trim().toLowerCase()))
   const sortedStudents = [...filteredStudents].sort((left, right) => {
     const value = (student) => ({ student_name: `${student.last_name} ${student.first_name}`, phone: student.phone || '', grade: student.current_enrollment?.grade?.title || '', admission_number: student.admission_number || '' })[studentSort.key] || ''
     const comparison = String(value(left)).localeCompare(String(value(right)), undefined, { numeric: true, sensitivity: 'base' })
@@ -164,6 +173,13 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const studentPageCount = Math.max(1, Math.ceil(sortedStudents.length / studentPageSize))
   const safeStudentPage = Math.min(studentPage, studentPageCount)
   const visibleStudents = sortedStudents.slice((safeStudentPage - 1) * studentPageSize, safeStudentPage * studentPageSize)
+  const pagerPages = Array.from({ length: studentPageCount }, (_, index) => index + 1)
+    .filter((page) => page === 1 || page === studentPageCount || Math.abs(page - safeStudentPage) <= 1)
+    .reduce((items, page, index, pages) => {
+      if (index && page - pages[index - 1] > 1) items.push(`ellipsis-${page}`)
+      items.push(page)
+      return items
+    }, [])
   useEffect(() => { setStudentPage(1) }, [search, studentPageSize])
   useEffect(() => { if (studentPage > studentPageCount) setStudentPage(studentPageCount) }, [studentPage, studentPageCount])
 
@@ -189,6 +205,9 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
         body: payload,
       }))
       setStudents((current) => [...current, student].sort((left, right) => `${left.last_name} ${left.first_name}`.localeCompare(`${right.last_name} ${right.first_name}`)))
+      if (admissionSeed && onAdmissionComplete) {
+        try { await onAdmissionComplete(admissionSeed, student) } catch (linkError) { setError(`Student profile saved, but the inquiry could not be marked registered: ${linkError.message}`) }
+      }
       setAdmissionNumber('')
       setFirstName('')
       setLastName('')
@@ -243,28 +262,22 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
     }
   }
 
-  async function archiveStudent(student) {
-    setError('')
+  async function saveWithdrawal(event, student) {
+    event.preventDefault(); setError('')
     try {
-      await readData(await apiRequest(`/api/schools/${school.id}/students/${student.id}`, { method: 'DELETE' }))
+      await readData(await apiRequest(`/api/schools/${school.id}/students/${student.id}/withdraw`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_date: lifecycleDate, reason: lifecycleReason }) }))
       setStudents(await readData(await apiRequest(`/api/schools/${school.id}/students`)))
-    } catch (archiveError) {
-      setError(archiveError.message)
-    }
+      setLifecycleStudentId(null); setLifecycleReason('')
+    } catch (withdrawError) { setError(withdrawError.message) }
   }
 
-  async function restoreStudent(student) {
-    setError('')
+  async function saveRejoining(event, student) {
+    event.preventDefault(); setError('')
     try {
-      await readData(await apiRequest(`/api/schools/${school.id}/students/${student.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'active' }),
-      }))
+      await readData(await apiRequest(`/api/schools/${school.id}/students/${student.id}/rejoin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grade_id: Number(gradeId), section_id: Number(sectionId), event_date: lifecycleDate, reason: lifecycleReason }) }))
       setStudents(await readData(await apiRequest(`/api/schools/${school.id}/students`)))
-    } catch (restoreError) {
-      setError(restoreError.message)
-    }
+      setLifecycleStudentId(null); setLifecycleReason(''); setSectionId('')
+    } catch (rejoinError) { setError(rejoinError.message) }
   }
 
   async function saveStudent(event, student) {
@@ -407,7 +420,8 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
               <div className="student-detail-grid"><section className="student-info-card"><div className="student-card-heading"><span className="student-card-icon" aria-hidden="true">▤</span><div><h5>Student information</h5><p>Admission, identity and contact details</p></div></div><dl>{studentProfileFields.map(([key, label]) => <div className={['email', 'address', 'previous_school_details', 'note'].includes(key) ? 'student-detail-wide' : ''} key={key}><dt>{label}</dt><dd>{key === 'email' && detailStudent[key] ? <a href={`mailto:${detailStudent[key]}`}>{detailStudent[key]}</a> : detailStudent[key] || '—'}</dd></div>)}</dl></section>
                 <section className="student-info-card"><div className="student-card-heading"><span className="student-card-icon" aria-hidden="true">♧</span><div><h5>Parent and guardian</h5><p>Family contacts linked to this student</p></div></div><dl>{guardianFields.map((key) => <div className={['guardian_email', 'guardian_address'].includes(key) ? 'student-detail-wide' : ''} key={key}><dt>{fieldLabel(key)}</dt><dd>{detailStudent.guardian?.[key] || '—'}</dd></div>)}<div><dt>Other guardian</dt><dd>{detailStudent.guardian?.is_guardian_other ? 'Yes' : 'No'}</dd></div></dl></section>
                 <section className="student-info-card student-documents-card"><div className="student-card-heading"><span className="student-card-icon" aria-hidden="true">⇧</span><div><h5>Documents</h5><p>Student photo and identification files</p></div></div><div className="student-document-items"><article><span><strong>Student photo</strong><small>{detailStudent.photo_url ? 'Photo available' : 'No photo uploaded'}</small></span>{detailStudent.photo_url ? <a className="student-file-button" href={detailStudent.photo_url} target="_blank" rel="noreferrer">View photo</a> : <span className="student-file-empty">—</span>}</article><article><span><strong>B-Form document</strong><small>{detailStudent.b_form_document_url ? 'Identification document available' : 'No document uploaded'}</small></span>{detailStudent.b_form_document_url ? <span className="student-file-links"><a className="student-file-button" href={detailStudent.b_form_document_url} target="_blank" rel="noreferrer">Open</a><a className="student-file-button student-file-button-muted" href={detailStudent.b_form_document_url} download>Download</a></span> : <span className="student-file-empty">—</span>}</article></div></section>
-                <section className="student-enrollment-history"><h5>Enrollment history</h5>{detailStudent.enrollments.length ? <div className="student-history-list">{detailStudent.enrollments.map((enrollment) => <div key={enrollment.id}><strong>{enrollment.grade.title} · {enrollment.section.title}</strong><span>{enrollment.academic_year} · {fieldLabel(enrollment.status)}</span></div>)}</div> : <p className="muted-copy">No enrollment history.</p>}</section></div>
+                <section className="student-enrollment-history"><h5>Enrollment history</h5>{detailStudent.enrollments.length ? <div className="student-history-list">{detailStudent.enrollments.map((enrollment) => <div key={enrollment.id}><strong>{enrollment.grade.title} · {enrollment.section.title}</strong><span>{enrollment.academic_year} · {fieldLabel(enrollment.status)}</span></div>)}</div> : <p className="muted-copy">No enrollment history.</p>}</section>
+                <section className="student-lifecycle-history"><h5>Withdrawals &amp; rejoinings</h5>{detailStudent.lifecycle_events?.length ? <div className="student-history-list">{detailStudent.lifecycle_events.map((item) => <div key={item.id}><strong>{fieldLabel(item.event_type)} · {item.event_date}</strong><span>{item.reason || 'No notes recorded'}</span></div>)}</div> : <p className="muted-copy">No withdrawal or rejoining history.</p>}</section></div>
               {canManage ? <section className="student-fee-history"><h5>Fee history</h5>{detailFees.length ? <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Fee item</th><th>Academic year / month</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>{detailFees.map((fee) => <tr key={`${fee.kind}-${fee.id}`}><td>{fee.fee_type}<small>{fee.kind === 'monthly' ? 'Monthly charge' : 'Invoice'}</small></td><td>{fee.billing_month || fee.academic_year}</td><td>{fee.due_date || '—'}</td><td>{fee.amount}</td><td>{fee.amount_paid || '0.00'}</td><td>{fee.balance}</td><td><span className={`fee-status fee-status-${fee.status}`}>{fieldLabel(fee.status)}</span></td></tr>)}</tbody></table></div> : <p className="muted-copy">No fee records are linked to this student yet.</p>}</section> : null}
             </> : null}
           </section> : <>
@@ -418,9 +432,9 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
           <span className="active-year-label">Active academic year <strong>{academicYear}</strong></span>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {loading ? <p className="muted-copy" role="status">Loading student roster…</p> : null}
-          {!loading && !attendanceOnly && !showStudentForm ? <div className="roster-toolbar"><label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search students" placeholder="Search students by name, admission no., phone, grade or section" value={search} onChange={(event) => setSearch(event.target.value)} /></label>{canManage ? <button className="primary-button small-button" type="button" onClick={() => setShowStudentForm(true)}>＋ Add student</button> : null}</div> : null}
+          {!loading && !attendanceOnly && !showStudentForm ? <div className="roster-toolbar"><label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search students" placeholder="Quick find by student, admission no., phone, grade or section" value={search} onChange={(event) => { setSearch(event.target.value); setStudentPage(1) }} /></label><span className="student-navigator-count">{filteredStudents.length} matches</span>{canManage ? <button className="primary-button small-button" type="button" onClick={() => setShowStudentForm(true)}>＋ Add student</button> : null}</div> : null}
           {showStudentForm && canManage ? <form className="student-profile-form" onSubmit={createStudent}>
-            <div className="student-form-heading"><div><h4>Student admission</h4><p>Enter the student profile and family contact details.</p></div><button className="quiet-button" type="button" onClick={() => setShowStudentForm(false)}>Cancel</button></div>
+            <div className="student-form-heading"><div><p className="eyebrow">Registration &amp; admission</p><h4>Student admission</h4><p>{admissionSeed ? `Complete the admission started from inquiry for ${admissionSeed.first_name} ${admissionSeed.last_name}.` : 'Enter the student profile and family contact details.'}</p></div><button className="quiet-button" type="button" onClick={() => { setShowStudentForm(false); if (admissionSeed) onAdmissionCancel?.() }}>Cancel</button></div>
             <fieldset><legend>Student profile</legend><div className="student-form-grid">
               {[
                 ['admission_number', 'Admission number', 'text', true], ['first_name', 'First name', 'text', true], ['last_name', 'Last name', 'text', true], ['gender', 'Gender', 'select', true], ['birth_date', 'Birth date', 'date', false], ['admission_date', 'Admission date', 'date', false], ['leave_date', 'Leave date', 'date', false], ['status', 'Admission status', 'status', false], ['religion', 'Religion', 'text', false], ['email', 'Email', 'email', false], ['phone', 'Phone', 'tel', false], ['b_form_number', 'B-Form number', 'text', false], ['address', 'Address', 'textarea', false], ['previous_school_details', 'Previous school details', 'textarea', false], ['note', 'Notes', 'textarea', false],
@@ -463,9 +477,9 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                             setGradeId(String(grades.find((grade) => grade.status === 'active')?.id || ''))
                             setSectionId('')
                           }} />
-                          <TableAction action="archive" label="Archive student" danger onClick={() => archiveStudent(student)} />
+                          <TableAction action="archive" label="Withdraw student" danger onClick={() => { setLifecycleStudentId(lifecycleStudentId === student.id ? null : student.id); setLifecycleMode('withdraw'); setLifecycleDate(todayDate()); setLifecycleReason(''); setActiveStudentId(null); setEditingStudentId(null) }} />
                         </>
-                      ) : <TableAction action="restore" label="Restore student" onClick={() => restoreStudent(student)} />}
+                      ) : ['leave', 'inactive'].includes(student.status) ? <TableAction action="restore" label="Rejoin student" onClick={() => { setLifecycleStudentId(lifecycleStudentId === student.id ? null : student.id); setLifecycleMode('rejoin'); setLifecycleDate(todayDate()); setLifecycleReason(''); setGradeId(String(student.current_enrollment?.grade?.id || grades.find((grade) => grade.status === 'active')?.id || '')); setSectionId(String(student.current_enrollment?.section?.id || '')); setActiveStudentId(null); setEditingStudentId(null) }} /> : null}
                       </> : null}
                     </div></td>
                   </tr>
@@ -507,12 +521,13 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                       <button className="primary-button small-button" type="submit" disabled={!sectionId}>Save enrollment</button>
                       <button className="quiet-button" type="button" onClick={() => setActiveStudentId(null)}>Cancel</button>
                   </form></td></tr> : null}
+                  {lifecycleStudentId === student.id ? <tr className="student-expanded-row"><td colSpan="4"><form className="student-lifecycle-form" onSubmit={(event) => lifecycleMode === 'withdraw' ? saveWithdrawal(event, student) : saveRejoining(event, student)}><div><p className="eyebrow">Student status</p><h4>{lifecycleMode === 'withdraw' ? 'Withdraw student' : 'Rejoin student'}</h4><p>{lifecycleMode === 'withdraw' ? 'Record the leaving date and reason. Their active enrollment will be closed.' : 'Choose the class and rejoining date. A new active enrollment will be created for the current session.'}</p></div>{lifecycleMode === 'rejoin' ? <><label>Grade<select value={gradeId} onChange={(event) => { setGradeId(event.target.value); setSectionId('') }} required><option value="">Choose grade</option>{grades.filter((grade) => grade.status === 'active').map((grade) => <option key={grade.id} value={grade.id}>{grade.title}</option>)}</select></label><label>Section<select value={sectionId} onChange={(event) => setSectionId(event.target.value)} required><option value="">Choose section</option>{availableSections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}</select></label><span className="active-year-label">Current session <strong>{academicYear}</strong></span></> : null}<label>{lifecycleMode === 'withdraw' ? 'Withdrawal date' : 'Rejoining date'}<input type="date" value={lifecycleDate} onChange={(event) => setLifecycleDate(event.target.value)} required /></label><label className="lifecycle-reason">Reason / notes<textarea rows="2" value={lifecycleReason} onChange={(event) => setLifecycleReason(event.target.value)} /></label><div className="student-form-actions"><button className="primary-button small-button" type="submit" disabled={lifecycleMode === 'rejoin' && !sectionId}>{lifecycleMode === 'withdraw' ? 'Confirm withdrawal' : 'Confirm rejoining'}</button><button className="quiet-button" type="button" onClick={() => setLifecycleStudentId(null)}>Cancel</button></div></form></td></tr> : null}
                 </Fragment>
                 )
               })}
             </tbody></table></div>
           ) : null}
-          {!loading && filteredStudents.length > 0 ? <footer className="student-pagination"><span>Showing {(safeStudentPage - 1) * studentPageSize + 1} to {Math.min(safeStudentPage * studentPageSize, sortedStudents.length)} of {sortedStudents.length} students</span><label>Rows per page<select aria-label="Students per page" value={studentPageSize} onChange={(event) => setStudentPageSize(Number(event.target.value))}><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label><nav aria-label="Student table pagination"><button type="button" disabled={safeStudentPage <= 1} onClick={() => setStudentPage(safeStudentPage - 1)}>‹</button>{Array.from({ length: studentPageCount }, (_, index) => index + 1).map((page) => <button type="button" key={page} className={safeStudentPage === page ? 'active' : ''} aria-current={safeStudentPage === page ? 'page' : undefined} onClick={() => setStudentPage(page)}>{page}</button>)}<button type="button" disabled={safeStudentPage >= studentPageCount} onClick={() => setStudentPage(safeStudentPage + 1)}>›</button></nav></footer> : null}
+          {!loading && filteredStudents.length > 0 ? <footer className="student-pagination"><span className="student-pagination-count">Showing <strong>{(safeStudentPage - 1) * studentPageSize + 1}–{Math.min(safeStudentPage * studentPageSize, sortedStudents.length)}</strong> of <strong>{sortedStudents.length}</strong> students</span><label className="student-pagination-size">Rows per page<select aria-label="Students per page" value={studentPageSize} onChange={(event) => setStudentPageSize(Number(event.target.value))}><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label><nav aria-label="Student table pagination"><button type="button" aria-label="Previous page" disabled={safeStudentPage <= 1} onClick={() => setStudentPage(safeStudentPage - 1)}>‹</button>{pagerPages.map((page) => typeof page === 'string' ? <span className="student-pagination-ellipsis" key={page}>…</span> : <button type="button" key={page} className={safeStudentPage === page ? 'active' : ''} aria-label={`Page ${page}`} aria-current={safeStudentPage === page ? 'page' : undefined} onClick={() => setStudentPage(page)}>{page}</button>)}<button type="button" aria-label="Next page" disabled={safeStudentPage >= studentPageCount} onClick={() => setStudentPage(safeStudentPage + 1)}>›</button></nav></footer> : null}
           {!loading && visibleStudents.length === 0 ? <p className="muted-copy">No students match this search. Add a student or import a student CSV to get started.</p> : null}
           {canTakeAttendance && (attendanceOnly || !standalone) ? (
             <>

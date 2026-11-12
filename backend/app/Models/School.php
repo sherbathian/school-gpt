@@ -41,6 +41,11 @@ class School extends Model
         return $this->hasMany(Student::class);
     }
 
+    public function studentInquiries(): HasMany
+    {
+        return $this->hasMany(StudentInquiry::class);
+    }
+
     public function guardians(): HasMany
     {
         return $this->hasMany(Guardian::class);

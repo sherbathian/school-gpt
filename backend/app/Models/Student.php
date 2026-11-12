@@ -35,6 +35,11 @@ class Student extends Model
         return $this->hasMany(Enrollment::class);
     }
 
+    public function lifecycleEvents(): HasMany
+    {
+        return $this->hasMany(StudentLifecycleEvent::class);
+    }
+
     public function feeInvoices(): HasMany
     {
         return $this->hasMany(FeeInvoice::class);

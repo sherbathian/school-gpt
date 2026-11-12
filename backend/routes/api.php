@@ -59,6 +59,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/schools/{school}/grades/{grade}/sections', [GradeController::class, 'syncSections']);
     Route::apiResource('schools.sections', SectionController::class);
     Route::apiResource('schools.subjects', SubjectController::class);
+    Route::get('/schools/{school}/students/{student}/media/{kind}', [StudentController::class, 'media'])->where('kind', 'photo|document');
     Route::apiResource('schools.students', StudentController::class);
     Route::post('/schools/{school}/students/{student}/enrollments', [StudentController::class, 'enroll']);
     Route::get('/schools/{school}/attendance', [AttendanceController::class, 'index']);

@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StudentController extends Controller
 {
@@ -98,6 +99,24 @@ class StudentController extends Controller
         }
 
         return response()->json(['data' => $data]);
+    }
+
+    public function media(Request $request, int $school, int $student, string $kind): StreamedResponse
+    {
+        $schoolRecord = $this->accessibleSchool($request, $school, 'view');
+        $studentRecord = $schoolRecord->students()->findOrFail($student);
+        $path = match ($kind) {
+            'photo' => $studentRecord->photo_path,
+            'document' => $studentRecord->b_form_document_path,
+            default => null,
+        };
+
+        abort_unless($path && Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, basename($path), [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ], 'inline');
     }
 
     public function update(Request $request, int $school, int $student): JsonResponse

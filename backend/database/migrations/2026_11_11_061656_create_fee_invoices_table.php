@@ -23,7 +23,7 @@ return new class extends Migration
             $table->string('status')->default('open');
             $table->timestamps();
 
-            $table->unique(['school_id', 'student_id', 'fee_type_id', 'academic_year']);
+            $table->unique(['school_id', 'student_id', 'fee_type_id', 'academic_year'], 'fee_invoices_school_student_type_year_unique');
             $table->unique(['school_id', 'id']);
             $table->index(['school_id', 'academic_year', 'status']);
             $table->foreign(['school_id', 'student_id'], 'fee_invoices_school_student_fk')

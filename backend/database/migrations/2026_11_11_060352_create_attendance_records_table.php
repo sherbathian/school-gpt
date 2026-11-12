@@ -24,7 +24,7 @@ return new class extends Migration
             $table->foreignId('marked_by_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            $table->unique(['school_id', 'enrollment_id', 'attendance_date']);
+            $table->unique(['school_id', 'enrollment_id', 'attendance_date'], 'attendance_school_enrollment_date_unique');
             $table->index(['school_id', 'attendance_date']);
             $table->foreign(['school_id', 'enrollment_id'], 'attendance_school_enrollment_fk')
                 ->references(['school_id', 'id'])

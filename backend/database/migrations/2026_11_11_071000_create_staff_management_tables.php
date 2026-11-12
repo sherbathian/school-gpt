@@ -67,7 +67,7 @@ return new class extends Migration
             $table->decimal('allocated', 5, 1);
             $table->decimal('used', 5, 1)->default(0);
             $table->timestamps();
-            $table->unique(['staff_id', 'leave_type_id', 'school_session_id']);
+            $table->unique(['staff_id', 'leave_type_id', 'school_session_id'], 'staff_leave_balances_staff_type_session_unique');
         });
     }
 

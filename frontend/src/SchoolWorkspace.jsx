@@ -391,7 +391,6 @@ export default function SchoolWorkspace({ user, onLogout }) {
             ))}
           </div>)}
         </nav>
-        <div className="sidebar-help"><span className="help-icon">?</span><strong>Need a hand?</strong><p>Contact your platform administrator for workspace access.</p></div>
         <div className="sidebar-user"><span className="user-avatar">{user.name.slice(0, 1).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.is_super_admin ? 'Platform admin' : 'School account'}</small></span></div>
       </aside>
       <div className="dashboard-main">

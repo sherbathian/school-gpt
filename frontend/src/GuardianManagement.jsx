@@ -22,7 +22,7 @@ async function readData(response) {
   return result.data
 }
 
-export default function GuardianManagement({ school, canManage }) {
+export default function GuardianManagement({ school, canManage, onNavigate, onOpenStudent }) {
   const [guardians, setGuardians] = useState([])
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -32,6 +32,8 @@ export default function GuardianManagement({ school, canManage }) {
   const [files, setFiles] = useState({})
   const [removeFiles, setRemoveFiles] = useState({})
   const [mediaUrls, setMediaUrls] = useState({})
+  const [selectedGuardian, setSelectedGuardian] = useState(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -80,6 +82,14 @@ export default function GuardianManagement({ school, canManage }) {
     } catch (loadError) { setError(loadError.message) } finally { setBusy(false) }
   }
 
+  async function openDetails(guardian) {
+    setDetailsLoading(true)
+    setError('')
+    try {
+      setSelectedGuardian(await readData(await apiRequest(`/api/schools/${school.id}/guardians/${guardian.id}`)))
+    } catch (loadError) { setError(loadError.message) } finally { setDetailsLoading(false) }
+  }
+
   async function saveGuardian(event) {
     event.preventDefault()
     setBusy(true)
@@ -117,13 +127,26 @@ export default function GuardianManagement({ school, canManage }) {
   }
 
   return <section className="academic-panel guardian-module" aria-labelledby={`guardians-heading-${school.id}`}>
-    {!showForm ? <>
+    {!showForm && selectedGuardian ? <section className="guardian-details-page" aria-label="Guardian details">
+      <button className="quiet-button guardian-back-button" type="button" onClick={() => setSelectedGuardian(null)}>← Back to guardians</button>
+      <header className="guardian-details-hero"><span className="guardian-details-avatar">{selectedGuardian.father_name?.[0] || 'G'}</span><div><p className="eyebrow">Guardian profile · Parent ID {selectedGuardian.id}</p><h3>{selectedGuardian.father_name}</h3><p>{selectedGuardian.father_phone || 'No father phone'}{selectedGuardian.mother_name ? ` · ${selectedGuardian.mother_name}` : ''}</p></div><span className="guardian-child-count">{selectedGuardian.children?.length || 0} linked {selectedGuardian.children?.length === 1 ? 'student' : 'students'}</span>{canManage ? <button className="primary-button small-button" type="button" onClick={() => { setSelectedGuardian(null); startEdit({ id: selectedGuardian.id, father_name: selectedGuardian.father_name }) }}>Edit guardian</button> : null}</header>
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      {detailsLoading ? <p className="muted-copy" role="status">Loading guardian details…</p> : <>
+        <div className="guardian-details-grid">
+          <section><h5>Father details</h5><dl>{[['Father name', 'father_name'], ['Phone', 'father_phone'], ['Occupation', 'father_occupation'], ['CNIC', 'father_cnic']].map(([label, key]) => <div key={key}><dt>{label}</dt><dd>{selectedGuardian[key] || '—'}</dd></div>)}</dl></section>
+          <section><h5>Mother details</h5><dl>{[['Mother name', 'mother_name'], ['Phone', 'mother_phone'], ['Occupation', 'mother_occupation'], ['CNIC', 'mother_cnic']].map(([label, key]) => <div key={key}><dt>{label}</dt><dd>{selectedGuardian[key] || '—'}</dd></div>)}</dl></section>
+          {selectedGuardian.is_guardian_other ? <section><h5>Other guardian</h5><dl>{[['Name', 'guardian_name'], ['Relation', 'guardian_relation'], ['Email', 'guardian_email'], ['Phone', 'guardian_phone'], ['Occupation', 'guardian_occupation'], ['CNIC', 'guardian_cnic'], ['Address', 'guardian_address']].map(([label, key]) => <div className={['guardian_email', 'guardian_address'].includes(key) ? 'guardian-detail-wide' : ''} key={key}><dt>{label}</dt><dd>{selectedGuardian[key] || '—'}</dd></div>)}</dl></section> : null}
+        </div>
+        <section className="guardian-documents-card"><h5>Documents</h5><div>{[['Father document', 'father'], ['Mother document', 'mother'], ...(selectedGuardian.is_guardian_other ? [['Guardian document', 'guardian']] : [])].map(([label, key]) => <article key={key}><span>{label}</span>{selectedGuardian[`${key}_doc_url`] ? <span className="student-file-links"><a href={selectedGuardian[`${key}_doc_url`]} target="_blank" rel="noreferrer">Open</a><a href={selectedGuardian[`${key}_doc_url`]} download>Download</a></span> : <small>No document uploaded</small>}</article>)}</div></section>
+        <section className="guardian-children-card"><div className="academic-section-heading"><h5>Children</h5><span>{selectedGuardian.children?.length || 0}</span></div>{selectedGuardian.children?.length ? <div className="crud-table-wrap"><table className="crud-table guardian-children-table"><thead><tr><th>Student</th><th>Admission number</th><th>Current class</th><th>Status</th><th>Actions</th></tr></thead><tbody>{selectedGuardian.children.map((child) => <tr key={child.id}><td>{child.last_name}, {child.first_name}</td><td>{child.admission_number}</td><td>{child.current_enrollment ? `${child.current_enrollment.grade || '—'} · ${child.current_enrollment.section || '—'}` : 'Not enrolled'}<small>{child.current_enrollment?.academic_year || ''}</small></td><td>{child.status}</td><td><TableAction action="view" label={`View ${child.first_name} ${child.last_name}`} onClick={() => { onNavigate?.('students'); onOpenStudent?.(child) }} /></td></tr>)}</tbody></table></div> : <p className="muted-copy">No students are linked to this guardian yet.</p>}</section>
+      </>}
+    </section> : !showForm ? <>
       <div className="directory-heading"><div><h4 id={`guardians-heading-${school.id}`}>Guardians</h4><p>Manage parent and guardian details for {school.name}.</p></div><span>{guardians.length} {guardians.length === 1 ? 'guardian' : 'guardians'}</span></div>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       {canManage ? <DataTools title="Guardians" rows={guardians} fields={importFields} exportFields={exportFields} canImport onImport={importGuardian} /> : null}
       <div className="guardian-list-toolbar"><label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search guardians" placeholder="Search by parent ID, parent name, phone or CNIC" value={search} onChange={(event) => setSearch(event.target.value)} /></label>{canManage ? <button className="primary-button small-button" type="button" onClick={startCreate}>＋ New guardian</button> : null}</div>
       {loading ? <p className="muted-copy" role="status">Loading guardians…</p> : null}
-      {!loading && visibleGuardians.length ? <div className="crud-table-wrap"><table className="crud-table guardian-table"><thead><tr><th>Parent ID</th><th>Father name</th><th>Father phone</th><th>Father occupation</th><th>Father CNIC</th><th>Mother name</th><th>Students</th><th>Actions</th></tr></thead><tbody>{visibleGuardians.map((guardian) => <tr key={guardian.id}><td>{guardian.id}</td><td>{guardian.father_name}</td><td>{guardian.father_phone || '—'}</td><td>{guardian.father_occupation || '—'}</td><td>{guardian.father_cnic}</td><td>{guardian.mother_name}</td><td>{guardian.students_count || 0}</td><td>{canManage ? <><TableAction action="edit" label="Edit guardian" onClick={() => startEdit(guardian)} disabled={busy} /><TableAction action="delete" label="Delete guardian" danger onClick={() => deleteGuardian(guardian)} /></> : '—'}</td></tr>)}</tbody></table></div> : null}
+      {!loading && visibleGuardians.length ? <div className="crud-table-wrap"><table className="crud-table guardian-table"><thead><tr><th>Parent ID</th><th>Father name</th><th>Father phone</th><th>Father occupation</th><th>Father CNIC</th><th>Mother name</th><th>Students</th><th>Actions</th></tr></thead><tbody>{visibleGuardians.map((guardian) => <tr key={guardian.id}><td>{guardian.id}</td><td>{guardian.father_name}</td><td>{guardian.father_phone || '—'}</td><td>{guardian.father_occupation || '—'}</td><td>{guardian.father_cnic}</td><td>{guardian.mother_name}</td><td>{guardian.students_count || 0}</td><td><TableAction action="view" label="View guardian and children" onClick={() => openDetails(guardian)} />{canManage ? <><TableAction action="edit" label="Edit guardian" onClick={() => startEdit(guardian)} disabled={busy} /><TableAction action="delete" label="Delete guardian" danger onClick={() => deleteGuardian(guardian)} /></> : null}</td></tr>)}</tbody></table></div> : null}
       {!loading && visibleGuardians.length === 0 ? <p className="muted-copy">No guardians match this search. Add a guardian or import a CSV file to get started.</p> : null}
     </> : <form className="guardian-profile-form" onSubmit={saveGuardian}>
       <div className="student-form-heading"><div><p className="eyebrow">Guardians</p><h4>{editingId ? 'Edit guardian' : 'Create guardian'}</h4><p>Enter parent details and attach supporting documents.</p></div><button className="quiet-button" type="button" onClick={() => setShowForm(false)}>Cancel</button></div>

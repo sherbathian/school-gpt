@@ -222,7 +222,7 @@ function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange
       {activeModule === 'academic-years' ? <SchoolSessions school={school} canManage={canManageUsers} onCurrentChange={onActiveSessionChange} /> : null}
       {activeModule.startsWith('staff-') ? <StaffManagement school={school} canManage={canManageUsers} activeView={activeModule} onNavigate={onNavigate} /> : null}
       {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded standalone selectedStudentId={activeStudentId} onOpenStudent={onOpenStudent} onCloseStudent={onCloseStudent} onNavigate={onNavigate} /> : null}
-      {activeModule === 'guardians' ? <GuardianManagement school={school} canManage={canManageUsers} /> : null}
+      {activeModule === 'guardians' ? <GuardianManagement school={school} canManage={canManageUsers} onNavigate={onNavigate} onOpenStudent={onOpenStudent} /> : null}
       {activeModule === 'attendance' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded attendanceOnly standalone /> : null}
       {['fees-catalog', 'fees-discounts', 'fees-groups', 'fees-masters'].includes(activeModule) && canManageUsers ? <FeeSetup school={school} activeSection={activeModule.replace('fees-', '') === 'catalog' ? 'fee-types' : activeModule.replace('fees-', '')} /> : null}
       {['fee-items', 'invoices'].includes(activeModule) && canManageUsers ? <FeeManagement school={school} expanded standalone activeView={activeModule} /> : null}

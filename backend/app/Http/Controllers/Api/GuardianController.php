@@ -185,6 +185,29 @@ class GuardianController extends Controller
                     ], absolute: false);
                 }
             }
+            $data['children'] = $guardian->students()
+                ->with('enrollments.grade:id,title', 'enrollments.section:id,title')
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->get()
+                ->map(function ($student): array {
+                    $activeEnrollment = $student->enrollments->sortByDesc('id')->firstWhere('status', 'active');
+
+                    return [
+                        'id' => $student->id,
+                        'admission_number' => $student->admission_number,
+                        'first_name' => $student->first_name,
+                        'last_name' => $student->last_name,
+                        'status' => $student->status,
+                        'current_enrollment' => $activeEnrollment ? [
+                            'grade' => $activeEnrollment->grade?->title,
+                            'section' => $activeEnrollment->section?->title,
+                            'academic_year' => $activeEnrollment->academic_year,
+                        ] : null,
+                    ];
+                })
+                ->values()
+                ->all();
         }
 
         return $data;

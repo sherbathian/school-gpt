@@ -6,6 +6,7 @@ import FeeManagement from './FeeManagement.jsx'
 import FeeSetup from './FeeSetup.jsx'
 import SchoolSessions from './SchoolSessions.jsx'
 import StaffManagement from './StaffManagement.jsx'
+import GuardianManagement from './GuardianManagement.jsx'
 import DataTools from './DataTools.jsx'
 
 async function readData(response) {
@@ -220,7 +221,8 @@ function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange
       {activeModule.startsWith('academic-') && activeModule !== 'academic-years' ? <AcademicStructure school={school} canManage={canManageUsers} expanded standalone activeSection={activeModule.replace('academic-', '')} /> : null}
       {activeModule === 'academic-years' ? <SchoolSessions school={school} canManage={canManageUsers} onCurrentChange={onActiveSessionChange} /> : null}
       {activeModule.startsWith('staff-') ? <StaffManagement school={school} canManage={canManageUsers} activeView={activeModule} onNavigate={onNavigate} /> : null}
-      {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded standalone selectedStudentId={activeStudentId} onOpenStudent={onOpenStudent} onCloseStudent={onCloseStudent} /> : null}
+      {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded standalone selectedStudentId={activeStudentId} onOpenStudent={onOpenStudent} onCloseStudent={onCloseStudent} onNavigate={onNavigate} /> : null}
+      {activeModule === 'guardians' ? <GuardianManagement school={school} canManage={canManageUsers} /> : null}
       {activeModule === 'attendance' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded attendanceOnly standalone /> : null}
       {['fees-catalog', 'fees-discounts', 'fees-groups', 'fees-masters'].includes(activeModule) && canManageUsers ? <FeeSetup school={school} activeSection={activeModule.replace('fees-', '') === 'catalog' ? 'fee-types' : activeModule.replace('fees-', '')} /> : null}
       {['fee-items', 'invoices'].includes(activeModule) && canManageUsers ? <FeeManagement school={school} expanded standalone activeView={activeModule} /> : null}
@@ -354,9 +356,11 @@ export default function SchoolWorkspace({ user, onLogout }) {
   const canManageSchool = user.is_super_admin || activeSchool?.role === 'school_admin'
   const navGroups = [
     { title: 'GENERAL', items: [['overview', '▦', 'Overview'], ['schools', '⌂', 'Schools']] },
+    { title: 'STUDENTS', items: [['students', '♧', 'Students'], ['attendance', '✓', 'Attendance']] },
+    { title: 'GUARDIANS', items: [['guardians', '♙', 'Guardians']] },
     { title: 'ACADEMICS', items: [['academic-sections', '▤', 'Sections'], ['academic-grades', '▤', 'Grades'], ['academic-subjects', '◈', 'Subjects'], ['academic-years', '◷', 'Academic years']] },
-    { title: 'PEOPLE', items: [['staff-directory', '♙', 'Staff'], ['staff-create', '＋', 'Add staff'], ['staff-designations', '◇', 'Designations'], ['staff-departments', '▥', 'Departments'], ['staff-leave-types', '◷', 'Leave types'], ['students', '♧', 'Students'], ['attendance', '✓', 'Attendance']] },
     { title: 'FINANCE', items: [['fees-catalog', '＄', 'Fee catalog'], ['fees-discounts', '%', 'Discounts'], ['fees-groups', '▣', 'Fee groups'], ['fees-masters', '▤', 'Fee masters'], ['fee-items', '＋', 'Invoice fee items'], ['invoices', '▧', 'Invoices & payments']] },
+    { title: 'PEOPLE', items: [['staff-directory', '♙', 'Staff'], ['staff-create', '＋', 'Add staff'], ['staff-designations', '◇', 'Designations'], ['staff-departments', '▥', 'Departments'], ['staff-leave-types', '◷', 'Leave types']] },
   ].map((group) => ({
     ...group,
     items: group.items.filter(([key]) => {

@@ -47,6 +47,7 @@ class StudentController extends Controller
         $schoolRecord = $this->accessibleSchool($request, $school, 'manage');
         $validated = $request->validate([
             'admission_number' => ['required', 'string', 'max:50', Rule::unique('students', 'admission_number')->where(fn (Builder $query) => $query->where('school_id', $schoolRecord->id))],
+            'guardian_id' => ['nullable', 'integer', Rule::exists('guardians', 'id')->where(fn (Builder $query) => $query->where('school_id', $schoolRecord->id))],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'gender' => ['nullable', Rule::in(['male', 'female'])], 'religion' => ['nullable', 'string', 'max:100'],
@@ -138,6 +139,7 @@ class StudentController extends Controller
         $schoolRecord = $this->accessibleSchool($request, $school, 'manage');
         $studentRecord = $schoolRecord->students()->findOrFail($student);
         $validated = $request->validate([
+            'guardian_id' => ['sometimes', 'nullable', 'integer', Rule::exists('guardians', 'id')->where(fn (Builder $query) => $query->where('school_id', $schoolRecord->id))],
             'admission_number' => ['sometimes', 'required', 'string', 'max:50', Rule::unique('students', 'admission_number')->where(fn (Builder $query) => $query->where('school_id', $schoolRecord->id))->ignore($studentRecord->id)],
             'first_name' => ['sometimes', 'required', 'string', 'max:100'],
             'last_name' => ['sometimes', 'required', 'string', 'max:100'],
@@ -276,6 +278,7 @@ class StudentController extends Controller
 
         return [
             'id' => $student->id,
+            'guardian_id' => $student->guardian_id,
             'admission_number' => $student->admission_number,
             'first_name' => $student->first_name,
             'last_name' => $student->last_name,
@@ -293,7 +296,7 @@ class StudentController extends Controller
             'leave_date' => $student->leave_date?->toDateString(),
             'previous_school_details' => $student->previous_school_details,
             'note' => $student->note,
-            'guardian' => $student->guardian?->only(['father_name', 'father_phone', 'father_occupation', 'father_cnic', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address']),
+            'guardian' => $student->guardian?->only(['id', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address']),
             'current_enrollment' => $currentEnrollment ? $this->enrollmentData($currentEnrollment) : null,
             'enrollments' => $enrollments->map(fn (Enrollment $enrollment) => $this->enrollmentData($enrollment))->all(),
         ];

@@ -639,3 +639,51 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
 .table-action-danger { color: #bb665a; }
 .table-action-danger:hover { border-color: #f1d7d2; background: #fff4f1; color: #a74f44; }
 .table-action:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.guardian-module { display: grid; gap: 16px; }
+.guardian-module .directory-heading { margin: 0; }
+.guardian-module .directory-heading h4 { margin: 0; color: #35415c; font-size: 20px; }
+.guardian-module .directory-heading p { margin: 5px 0 0; color: #7d879c; font-size: 14px; }
+.guardian-module .data-tools { margin: 0; }
+.guardian-list-toolbar { display: flex; align-items: center; gap: 12px; }
+.guardian-list-toolbar .module-search { flex: 1; }
+.guardian-list-toolbar .primary-button { flex: 0 0 auto; margin: 0; }
+.guardian-table { min-width: 900px; }
+.guardian-profile-form { display: grid; gap: 18px; padding: 22px; border: 1px solid #e7eaf2; border-radius: 11px; background: #fff; box-shadow: 0 4px 16px rgba(45, 57, 88, .035); }
+.guardian-form-section { min-width: 0; margin: 0; padding: 18px; border: 1px solid #e8ebf2; border-radius: 10px; background: #fff; }
+.guardian-form-section legend { padding: 0 7px; color: #35415c; font-size: 17px; font-weight: 700; }
+.guardian-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.guardian-form-grid > label { min-width: 0; display: grid; align-content: start; gap: 7px; color: #59647c; font-size: 13px; font-weight: 600; }
+.guardian-form-grid input:not([type="file"]), .guardian-form-grid textarea { width: 100%; min-width: 0; min-height: 42px; padding: 9px 11px; border: 1px solid #dfe4ef; border-radius: 7px; background: #fff; color: #303a54; font: inherit; font-size: 14px; }
+.guardian-form-grid textarea { resize: vertical; }
+.guardian-file-drop { position: relative; min-height: 88px; display: grid; place-items: center; padding: 12px; border: 1px dashed #d5dbea; border-radius: 8px; background: #fafbfe; color: #737f98; text-align: center; }
+.guardian-file-drop input { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; opacity: 0; }
+.guardian-file-field > a { color: #5267d5; font-size: 12px; }
+.guardian-file-field > small { color: #8993a8; font-size: 11px; font-weight: 500; }
+.guardian-toggle { margin: 0 0 16px; display: flex; align-items: center; gap: 8px; color: #59647c; font-size: 14px; }
+.guardian-toggle input { accent-color: #586bd6; }
+.guardian-parent-id { display: inline-grid; justify-items: start; gap: 4px; padding: 10px 13px; border-radius: 8px; background: #f5f6fc; color: #66718c; }
+.guardian-parent-id strong { color: #35415c; font-size: 17px; }
+.guardian-parent-id small { font-size: 11px; }
+.student-guardian-select-row { display: flex; align-items: end; gap: 14px; }
+.student-guardian-select-row > label { min-width: 240px; flex: 1; display: grid; gap: 7px; color: #59647c; font-size: 13px; font-weight: 600; }
+.student-guardian-select-row select { min-height: 42px; padding: 8px 10px; border: 1px solid #dfe4ef; border-radius: 7px; background: #fff; color: #303a54; font: inherit; }
+.student-guardian-select-row .quiet-button { padding: 10px 0; }
+@media (max-width: 850px) { .guardian-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) {
+  .guardian-list-toolbar { align-items: stretch; flex-direction: column; }
+  .guardian-list-toolbar .primary-button { align-self: start; }
+  .guardian-form-grid { grid-template-columns: 1fr; }
+  .guardian-profile-form { padding: 14px; }
+  .guardian-form-section { padding: 13px; }
+  .student-guardian-select-row { align-items: flex-start; flex-direction: column; }
+  .student-guardian-select-row > label { width: 100%; min-width: 0; }
+}
+.attendance-filter-form { grid-template-columns: minmax(150px, .9fr) repeat(3, minmax(150px, 1fr)) auto; align-items: end; gap: 16px; }
+.attendance-year-field { min-width: 0; min-height: 46px; display: grid; align-content: center; gap: 4px; color: #78849a; font-size: 12px; }
+.attendance-year-field strong { width: fit-content; padding: 5px 9px; border-radius: 7px; background: #eef0ff; color: #596bd1; font-size: 14px; }
+.attendance-filter-form .attendance-filter-field { min-width: 0; display: grid; gap: 7px; color: #59647c; font-size: 13px; font-weight: 650; }
+.attendance-filter-form .attendance-filter-field select,
+.attendance-filter-form .attendance-filter-field input { width: 100%; min-width: 0; height: 46px; padding: 0 11px; border: 1px solid #dfe4ef; border-radius: 8px; background: #fff; color: #303a54; font: inherit; font-size: 14px; }
+.attendance-filter-form > .small-button { width: auto; min-width: 132px; min-height: 46px; margin: 0; align-self: end; }
+@media (max-width: 1100px) { .attendance-filter-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .attendance-filter-form { grid-template-columns: 1fr; } .attendance-filter-form > .small-button { justify-self: start; } }

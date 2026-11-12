@@ -38,18 +38,19 @@ const guardianFields = [
 
 const studentImportFields = [
   ...studentProfileFields.map(([key, label]) => ({ key, label: key, required: ['admission_number', 'first_name', 'last_name'].includes(key) })),
+  { key: 'guardian_id', label: 'guardian_id' },
   ...[...guardianFields, 'is_guardian_other'].map((key) => ({ key: `guardian_${key}`, label: `guardian_${key}` })),
 ]
 
 const studentExportFields = [
-  ...studentProfileFields.map(([key]) => key), ...guardianFields.map((key) => `guardian_${key}`),
+  ...studentProfileFields.map(([key]) => key), 'guardian_id', ...guardianFields.map((key) => `guardian_${key}`),
   'guardian_is_guardian_other', 'grade', 'section', 'academic_year', 'enrollment_history',
 ].map((key) => ({ key, label: key }))
 
 function studentEditValues(student) {
   return {
     ...Object.fromEntries(studentProfileFields.map(([key]) => [key, student[key] ?? ''])),
-    guardian: Object.fromEntries([...guardianFields, 'is_guardian_other'].map((key) => [key, student.guardian?.[key] ?? (key === 'is_guardian_other' ? false : '')])),
+    guardian_id: String(student.guardian_id || student.guardian?.id || ''),
   }
 }
 
@@ -57,16 +58,17 @@ function fieldLabel(key) {
   return key.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-export default function StudentRoster({ school, canManage, canTakeAttendance, expanded = false, attendanceOnly = false, standalone = false, selectedStudentId = null, onOpenStudent, onCloseStudent }) {
+export default function StudentRoster({ school, canManage, canTakeAttendance, expanded = false, attendanceOnly = false, standalone = false, selectedStudentId = null, onOpenStudent, onCloseStudent, onNavigate }) {
   const [open, setOpen] = useState(expanded)
   const [loaded, setLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [students, setStudents] = useState([])
   const [grades, setGrades] = useState([])
+  const [guardians, setGuardians] = useState([])
   const [admissionNumber, setAdmissionNumber] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [studentForm, setStudentForm] = useState({ admission_number: '', first_name: '', last_name: '', gender: 'male', religion: '', email: '', phone: '', address: '', birth_date: '', b_form_number: '', admission_date: todayDate(), previous_school_details: '', note: '', guardian: { father_name: '', father_phone: '', father_occupation: '', father_cnic: '', mother_name: '', mother_phone: '', mother_occupation: '', mother_cnic: '', is_guardian_other: false, guardian_name: '', guardian_relation: '', guardian_email: '', guardian_phone: '', guardian_occupation: '', guardian_cnic: '', guardian_address: '' } })
+  const [studentForm, setStudentForm] = useState({ admission_number: '', first_name: '', last_name: '', gender: 'male', religion: '', email: '', phone: '', address: '', birth_date: '', b_form_number: '', admission_date: todayDate(), previous_school_details: '', note: '', guardian_id: '' })
   const [showStudentForm, setShowStudentForm] = useState(false)
   const [photoFile, setPhotoFile] = useState(null)
   const [bFormFile, setBFormFile] = useState(null)
@@ -103,13 +105,15 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
       setLoading(true)
       setError('')
       try {
-        const [studentResponse, gradeResponse] = await Promise.all([
+        const [studentResponse, gradeResponse, guardianResponse] = await Promise.all([
           apiRequest(`/api/schools/${school.id}/students`, { signal: controller.signal }),
           apiRequest(`/api/schools/${school.id}/grades`, { signal: controller.signal }),
+          apiRequest(`/api/schools/${school.id}/guardians`, { signal: controller.signal }),
         ])
-        const [studentData, gradeData] = await Promise.all([readData(studentResponse), readData(gradeResponse)])
+        const [studentData, gradeData, guardianData] = await Promise.all([readData(studentResponse), readData(gradeResponse), readData(guardianResponse)])
         setStudents(studentData)
         setGrades(gradeData)
+        setGuardians(guardianData)
         setGradeId(String(gradeData.find((grade) => grade.status === 'active')?.id || ''))
         setAttendanceGradeId(String(gradeData.find((grade) => grade.status === 'active')?.id || ''))
         setLoaded(true)
@@ -159,8 +163,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
     setError('')
     try {
       const payload = new FormData()
-      Object.entries(studentForm).filter(([key]) => key !== 'guardian').forEach(([key, value]) => { if (value !== '' && value != null) payload.append(key, value) })
-      Object.entries(studentForm.guardian).forEach(([key, value]) => { if (value !== '' && value != null) payload.append(`guardian[${key}]`, typeof value === 'boolean' ? (value ? '1' : '0') : value) })
+      Object.entries(studentForm).forEach(([key, value]) => { if (value !== '' && value != null) payload.append(key, value) })
       if (photoFile) payload.append('photo', photoFile)
       if (bFormFile) payload.append('b_form_document', bFormFile)
       const student = await readData(await apiRequest(`/api/schools/${school.id}/students`, {
@@ -181,7 +184,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   }
 
   async function importStudent(row) {
-    const guardian = Object.fromEntries(Object.entries(row).filter(([key]) => key.startsWith('guardian_')).map(([key, value]) => [key.slice(9), value]))
+    const guardian = Object.fromEntries(Object.entries(row).filter(([key]) => key.startsWith('guardian_') && key !== 'guardian_id').map(([key, value]) => [key.slice(9), value]))
     const student = await readData(await apiRequest(`/api/schools/${school.id}/students`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...row, guardian: Object.values(guardian).some(Boolean) ? guardian : undefined }),
@@ -252,7 +255,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
     try {
       const payload = new FormData()
       studentProfileFields.forEach(([key]) => payload.append(key, editStudentForm[key] ?? ''))
-      Object.entries(editStudentForm.guardian).forEach(([key, value]) => payload.append(`guardian[${key}]`, typeof value === 'boolean' ? (value ? '1' : '0') : value ?? ''))
+      payload.append('guardian_id', editStudentForm.guardian_id || '')
       if (editPhotoFile) payload.append('photo', editPhotoFile)
       if (editBFormFile) payload.append('b_form_document', editBFormFile)
       payload.append('remove_photo', removeStudentPhoto ? '1' : '0')
@@ -406,11 +409,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
               <label>Student photo<input type="file" accept="image/*" onChange={(event) => setPhotoFile(event.target.files?.[0] || null)} /></label>
               <label>B-Form document<input type="file" accept=".pdf,image/*" onChange={(event) => setBFormFile(event.target.files?.[0] || null)} /></label>
             </div></fieldset>
-            <fieldset><legend>Parent / guardian details</legend><div className="student-form-grid">
-              {['father_name', 'father_phone', 'father_occupation', 'father_cnic', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic'].map((key) => <label key={key}>{key.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}<input value={studentForm.guardian[key]} onChange={(event) => setStudentForm({ ...studentForm, guardian: { ...studentForm.guardian, [key]: event.target.value } })} /></label>)}
-              <label className="student-form-check"><input type="checkbox" checked={studentForm.guardian.is_guardian_other} onChange={(event) => setStudentForm({ ...studentForm, guardian: { ...studentForm.guardian, is_guardian_other: event.target.checked } })} /> Other guardian</label>
-              {studentForm.guardian.is_guardian_other ? ['guardian_name', 'guardian_relation', 'guardian_phone', 'guardian_email', 'guardian_occupation', 'guardian_cnic', 'guardian_address'].map((key) => <label key={key}>{key.replace('guardian_', '').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}<input value={studentForm.guardian[key]} onChange={(event) => setStudentForm({ ...studentForm, guardian: { ...studentForm.guardian, [key]: event.target.value } })} required={['guardian_name', 'guardian_relation', 'guardian_phone'].includes(key)} /></label>) : null}
-            </div></fieldset>
+            <fieldset><legend>Parent / guardian</legend><div className="student-guardian-select-row"><label>Select a guardian<select value={studentForm.guardian_id} onChange={(event) => setStudentForm((current) => ({ ...current, guardian_id: event.target.value }))}><option value="">No guardian selected</option>{guardians.map((guardian) => <option key={guardian.id} value={guardian.id}>#{guardian.id} · {guardian.father_name} / {guardian.mother_name}{guardian.father_phone ? ` · ${guardian.father_phone}` : ''}</option>)}</select></label><button className="quiet-button" type="button" onClick={() => onNavigate?.('guardians')}>Manage guardians</button></div>{guardians.length === 0 ? <p className="muted-copy">Add a guardian first, then select them here.</p> : null}</fieldset>
             <div className="student-form-actions"><button className="primary-button small-button" type="submit">Save student</button><button className="quiet-button" type="button" onClick={() => setShowStudentForm(false)}>Cancel</button></div>
           </form> : null}
           {!loading && visibleStudents.length ? (
@@ -458,10 +457,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                       <label>Student photo<input type="file" accept="image/*" onChange={(event) => setEditPhotoFile(event.target.files?.[0] || null)} />{student.photo_path ? <span className="student-file-remove"><input type="checkbox" checked={removeStudentPhoto} onChange={(event) => setRemoveStudentPhoto(event.target.checked)} /> Remove current photo</span> : null}</label>
                       <label>B-Form document<input type="file" accept=".pdf,image/*" onChange={(event) => setEditBFormFile(event.target.files?.[0] || null)} />{student.b_form_document_path ? <span className="student-file-remove"><input type="checkbox" checked={removeStudentBForm} onChange={(event) => setRemoveStudentBForm(event.target.checked)} /> Remove current document</span> : null}</label>
                     </div></fieldset>
-                    <fieldset><legend>Parent and guardian details</legend><div className="student-form-grid">
-                      {guardianFields.filter((key) => !key.startsWith('guardian_') || editStudentForm.guardian.is_guardian_other).map((key) => <label key={key}>{fieldLabel(key)}{key === 'guardian_address' ? <textarea rows="2" value={editStudentForm.guardian[key]} onChange={(event) => setEditStudentForm((current) => ({ ...current, guardian: { ...current.guardian, [key]: event.target.value } }))} /> : <input type={key === 'guardian_email' ? 'email' : 'text'} value={editStudentForm.guardian[key]} onChange={(event) => setEditStudentForm((current) => ({ ...current, guardian: { ...current.guardian, [key]: event.target.value } }))} />}</label>)}
-                      <label className="student-form-check"><input type="checkbox" checked={editStudentForm.guardian.is_guardian_other} onChange={(event) => setEditStudentForm((current) => ({ ...current, guardian: { ...current.guardian, is_guardian_other: event.target.checked } }))} /> Use another guardian</label>
-                    </div></fieldset>
+                    <fieldset><legend>Parent / guardian</legend><div className="student-guardian-select-row"><label>Select a guardian<select value={editStudentForm.guardian_id} onChange={(event) => setEditStudentForm((current) => ({ ...current, guardian_id: event.target.value }))}><option value="">No guardian selected</option>{guardians.map((guardian) => <option key={guardian.id} value={guardian.id}>#{guardian.id} · {guardian.father_name} / {guardian.mother_name}{guardian.father_phone ? ` · ${guardian.father_phone}` : ''}</option>)}</select></label></div><p className="muted-copy">Update guardian contact information in the Guardians module.</p></fieldset>
                     <div className="student-form-actions"><button className="primary-button small-button" type="submit">Save changes</button><button className="quiet-button" type="button" onClick={() => { setEditingStudentId(null); setEditStudentForm(null) }}>Cancel</button></div>
                   </form></td></tr> : null}
                   {detailStudentId === student.id ? <tr className="student-expanded-row"><td colSpan="4"><section className="student-detail-panel" aria-label={`Details for ${student.first_name} ${student.last_name}`}>
@@ -506,29 +502,27 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
               {attendanceOpen ? (
                 <section className="attendance-panel" aria-label="Class attendance">
                   <form className="attendance-filter-form" onSubmit={loadAttendance}>
-                    <span className="active-year-label">Academic year <strong>{school.active_session?.academic_year || attendanceYear}</strong></span>
-                    <label htmlFor={`attendance-grade-${school.id}`}>Grade</label>
-                    <select id={`attendance-grade-${school.id}`} value={attendanceGradeId} onChange={(event) => {
+                    <div className="attendance-year-field"><span>Academic year</span><strong>{school.active_session?.academic_year || attendanceYear}</strong></div>
+                    <label className="attendance-filter-field" htmlFor={`attendance-grade-${school.id}`}>Grade<select id={`attendance-grade-${school.id}`} value={attendanceGradeId} onChange={(event) => {
                       setAttendanceGradeId(event.target.value)
                       setAttendanceSectionId('')
                       setAttendanceLoaded(false)
                     }} required>
                       <option value="">Choose a grade</option>
                       {grades.filter((grade) => grade.status === 'active').map((grade) => <option key={grade.id} value={grade.id}>{grade.title}</option>)}
-                    </select>
-                    <label htmlFor={`attendance-section-${school.id}`}>Section</label>
-                    <select id={`attendance-section-${school.id}`} value={attendanceSectionId} onChange={(event) => {
+                    </select></label>
+                    <label className="attendance-filter-field" htmlFor={`attendance-section-${school.id}`}>Section<select id={`attendance-section-${school.id}`} value={attendanceSectionId} onChange={(event) => {
                       setAttendanceSectionId(event.target.value)
                       setAttendanceLoaded(false)
                     }} required>
                       <option value="">Choose a section</option>
                       {attendanceSections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
-                    </select>
-                    <label htmlFor={`attendance-date-${school.id}`}>Date</label>
-                    <input id={`attendance-date-${school.id}`} type="date" value={attendanceDate} onChange={(event) => {
+                    </select></label>
+                    <label className="attendance-filter-field" htmlFor={`attendance-date-${school.id}`}>Date<input id={`attendance-date-${school.id}`} type="date" value={attendanceDate} onChange={(event) => {
                       setAttendanceDate(event.target.value)
                       setAttendanceLoaded(false)
                     }} required />
+                    </label>
                     <button className="primary-button small-button" type="submit" disabled={attendanceLoading}>
                       {attendanceLoading ? 'Loading…' : 'Load class'}
                     </button>

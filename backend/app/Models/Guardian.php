@@ -11,7 +11,7 @@ class Guardian extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['school_id', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address'];
+    protected $fillable = ['school_id', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'father_doc_path', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'mother_doc_path', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address', 'guardian_doc_path'];
 
     public function school(): BelongsTo
     {

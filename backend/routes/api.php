@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\FeeInvoiceController;
 use App\Http\Controllers\Api\FeeMasterController;
 use App\Http\Controllers\Api\FeeTypeController;
 use App\Http\Controllers\Api\GradeController;
+use App\Http\Controllers\Api\GuardianController;
 use App\Http\Controllers\Api\LegacyFeeTypeController;
 use App\Http\Controllers\Api\SchoolSessionController;
 use App\Http\Controllers\Api\SectionController;
@@ -60,6 +61,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('schools.sections', SectionController::class);
     Route::apiResource('schools.subjects', SubjectController::class);
     Route::apiResource('schools.students', StudentController::class);
+    Route::get('/schools/{school}/guardians', [GuardianController::class, 'index']);
+    Route::post('/schools/{school}/guardians', [GuardianController::class, 'store']);
+    Route::get('/schools/{school}/guardians/{guardian}', [GuardianController::class, 'show']);
+    Route::patch('/schools/{school}/guardians/{guardian}', [GuardianController::class, 'update']);
+    Route::delete('/schools/{school}/guardians/{guardian}', [GuardianController::class, 'destroy']);
     Route::post('/schools/{school}/students/{student}/enrollments', [StudentController::class, 'enroll']);
     Route::get('/schools/{school}/attendance', [AttendanceController::class, 'index']);
     Route::put('/schools/{school}/attendance', [AttendanceController::class, 'update']);
@@ -82,3 +88,8 @@ Route::get('/schools/{school}/students/{student}/media/{kind}', [StudentControll
     ->where('kind', 'photo|document')
     ->middleware('signed:relative')
     ->name('students.media');
+
+Route::get('/schools/{school}/guardians/{guardian}/media/{kind}', [GuardianController::class, 'media'])
+    ->where('kind', 'father|mother|guardian')
+    ->middleware('signed:relative')
+    ->name('guardians.media');

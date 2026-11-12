@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
 import DataTools from './DataTools.jsx'
+import TableAction from './TableAction.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -102,9 +103,9 @@ export default function SchoolSessions({ school, canManage, onCurrentChange }) {
         <h4 id={`sessions-title-${school.id}`}>School sessions</h4>
         <span>{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}</span>
       </div>
-      <DataTools title="School sessions" rows={sessions} fields={[{ key: 'title', label: 'title', required: true }, { key: 'starts_on', label: 'starts_on', required: true }, { key: 'ends_on', label: 'ends_on', required: true }, { key: 'status', label: 'status' }, { key: 'is_current', label: 'is_current' }]} canImport={canManage} onImport={importSession} />
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search academic years" placeholder="Search academic years" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+      <DataTools title="School sessions" rows={sessions} fields={[{ key: 'title', label: 'title', required: true }, { key: 'starts_on', label: 'starts_on', required: true }, { key: 'ends_on', label: 'ends_on', required: true }, { key: 'status', label: 'status' }, { key: 'is_current', label: 'is_current' }]} canImport={canManage} onImport={importSession} />
+      <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search academic years" placeholder="Search academic years" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
       {sessions.length ? (
         <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Session</th><th>Date range</th><th>Status</th><th>Actions</th></tr></thead><tbody>
           {visibleSessions.map((session) => (
@@ -113,7 +114,7 @@ export default function SchoolSessions({ school, canManage, onCurrentChange }) {
                 <td>{session.title}{session.is_current ? <small>Active academic year</small> : null}</td>
                 <td>{session.starts_on} – {session.ends_on}</td>
                 <td>{session.status}</td>
-                <td>{!session.is_current && canManage ? <button className="quiet-button" type="button" onClick={() => makeCurrent(session)}>Make current</button> : null}{canManage ? <button className="quiet-button" type="button" onClick={() => startEditing(session)}>Edit</button> : null}</td>
+                <td>{!session.is_current && canManage ? <TableAction action="current" label="Make current session" onClick={() => makeCurrent(session)} /> : null}{canManage ? <TableAction action="edit" label="Edit session" onClick={() => startEditing(session)} /> : null}</td>
               </tr>
               {editingId === session.id ? <tr><td colSpan="4"><form className="session-edit-form" onSubmit={(event) => saveSession(event, session)}>
                 <label>Session title<input value={editForm.title} onChange={(event) => setEditForm((current) => ({ ...current, title: event.target.value }))} maxLength="100" required /></label>

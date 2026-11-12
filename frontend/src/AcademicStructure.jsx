@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
 import DataTools from './DataTools.jsx'
+import TableAction from './TableAction.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -58,7 +59,7 @@ function GradeCard({ schoolId, grade, sections, canManage, onUpdated }) {
 
   return (
     <Fragment>
-      <tr><td>{grade.title}<small>{grade.status}</small></td><td>{grade.sections.map((section) => section.title).join(', ') || '—'}</td><td>{canManage ? <><button className="quiet-button" type="button" onClick={() => { setTitle(grade.title); setStatus(grade.status); setSelectedSections(grade.sections.map((section) => section.id)); setEditing((current) => !current) }}>{editing ? 'Cancel' : 'Edit'}</button>{grade.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveGrade} disabled={busy}>Archive</button> : null}</> : null}</td></tr>
+      <tr><td>{grade.title}<small>{grade.status}</small></td><td>{grade.sections.map((section) => section.title).join(', ') || '—'}</td><td>{canManage ? <><TableAction action="edit" label={editing ? 'Cancel edit' : 'Edit grade'} onClick={() => { setTitle(grade.title); setStatus(grade.status); setSelectedSections(grade.sections.map((section) => section.id)); setEditing((current) => !current) }} />{grade.status === 'active' ? <TableAction action="archive" label="Archive grade" danger onClick={archiveGrade} disabled={busy} /> : null}</> : null}</td></tr>
       {editing ? <tr><td colSpan="3"><form className="academic-edit-form" onSubmit={saveGrade}>
         <label htmlFor={`grade-title-${grade.id}`}>Grade title</label><input id={`grade-title-${grade.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
         <label htmlFor={`grade-status-${grade.id}`}>Status</label><select id={`grade-status-${grade.id}`} value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Active</option><option value="inactive">Inactive</option></select>
@@ -105,7 +106,7 @@ function SectionCard({ schoolId, section, canManage, onUpdated }) {
     <Fragment>
       <tr>
         <td>{section.title}</td><td>{section.status}</td>
-        <td>{canManage ? <><button className="quiet-button" type="button" onClick={() => { setTitle(section.title); setStatus(section.status); setEditing(true) }}>Edit</button>{section.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveSection}>Archive</button> : null}</> : null}</td>
+        <td>{canManage ? <><TableAction action="edit" label="Edit section" onClick={() => { setTitle(section.title); setStatus(section.status); setEditing(true) }} />{section.status === 'active' ? <TableAction action="archive" label="Archive section" danger onClick={archiveSection} /> : null}</> : null}</td>
       </tr>
       {editing ? <tr><td colSpan="3"><form className="section-edit-form" onSubmit={saveSection}>
         <label htmlFor={`section-title-${section.id}`}>Section title</label><input id={`section-title-${section.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
@@ -157,7 +158,7 @@ function SubjectCard({ schoolId, subject, grades, canManage, onUpdated }) {
 
   return (
     <Fragment>
-      <tr><td>{subject.title}<small>{subject.status}</small></td><td>{subject.grades.map((grade) => grade.title).join(', ') || '—'}</td><td>{canManage ? <><button className="quiet-button" type="button" onClick={() => { setTitle(subject.title); setStatus(subject.status); setSelectedGrades(subject.grades.map((grade) => grade.id)); setEditing((current) => !current) }}>{editing ? 'Cancel' : 'Edit'}</button>{subject.status === 'active' ? <button className="quiet-button danger-action" type="button" onClick={archiveSubject}>Archive</button> : null}</> : null}</td></tr>
+      <tr><td>{subject.title}<small>{subject.status}</small></td><td>{subject.grades.map((grade) => grade.title).join(', ') || '—'}</td><td>{canManage ? <><TableAction action="edit" label={editing ? 'Cancel edit' : 'Edit subject'} onClick={() => { setTitle(subject.title); setStatus(subject.status); setSelectedGrades(subject.grades.map((grade) => grade.id)); setEditing((current) => !current) }} />{subject.status === 'active' ? <TableAction action="archive" label="Archive subject" danger onClick={archiveSubject} /> : null}</> : null}</td></tr>
       {editing ? <tr><td colSpan="3"><form className="academic-edit-form" onSubmit={saveSubject}>
         <label htmlFor={`subject-title-${subject.id}`}>Subject title</label><input id={`subject-title-${subject.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
         <label htmlFor={`subject-status-${subject.id}`}>Status</label><select id={`subject-status-${subject.id}`} value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Active</option><option value="inactive">Inactive</option></select>
@@ -326,7 +327,6 @@ export default function AcademicStructure({ school, canManage, expanded = false,
           {loading ? <p className="muted-copy" role="status">Loading academic structure…</p> : null}
           {!loading ? (
             <>
-              <label className="module-search"><span aria-hidden="true">⌕</span><input aria-label={`Search ${activeSection === 'all' ? 'academic records' : activeSection}`} placeholder={`Search ${activeSection === 'all' ? 'sections, grades and subjects' : activeSection}`} value={search} onChange={(event) => setSearch(event.target.value)} /></label>
               {(activeSection === 'all' || activeSection === 'sections') ? <section aria-labelledby={`sections-heading-${school.id}`}>
                 <div className="academic-section-heading">
                   <h4 id={`sections-heading-${school.id}`}>Sections</h4>
@@ -340,6 +340,7 @@ export default function AcademicStructure({ school, canManage, expanded = false,
                     <button className="primary-button small-button" type="submit">Add section</button>
                   </form>
                 ) : null}
+                <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search sections" placeholder="Search sections" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
                 {sections.length ? (
                   <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Section</th><th>Status</th><th>Actions</th></tr></thead><tbody>
                     {matchingSections.map((section) => <SectionCard key={section.id} schoolId={school.id} section={section} canManage={canManage} onUpdated={updateSection} />)}
@@ -370,6 +371,7 @@ export default function AcademicStructure({ school, canManage, expanded = false,
                     <button className="primary-button small-button" type="submit">Add grade</button>
                   </form>
                 ) : null}
+                <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search grades" placeholder="Search grades" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
                 {grades.length ? (
                   <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Grade</th><th>Assigned sections</th><th>Actions</th></tr></thead><tbody>
                     {matchingGrades.map((grade) => <GradeCard key={grade.id} schoolId={school.id} grade={grade} sections={sections} canManage={canManage} onUpdated={updateGrade} />)}
@@ -400,6 +402,7 @@ export default function AcademicStructure({ school, canManage, expanded = false,
                     <button className="primary-button small-button" type="submit">Add subject</button>
                   </form>
                 ) : null}
+                <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search subjects" placeholder="Search subjects" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
                 {subjects.length ? (
                   <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Subject</th><th>Assigned grades</th><th>Actions</th></tr></thead><tbody>
                     {matchingSubjects.map((subject) => <SubjectCard key={subject.id} schoolId={school.id} subject={subject} grades={grades} canManage={canManage} onUpdated={updateSubject} />)}

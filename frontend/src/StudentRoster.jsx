@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
 import DataTools from './DataTools.jsx'
+import TableAction from './TableAction.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -395,7 +396,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
           <span className="active-year-label">Active academic year <strong>{academicYear}</strong></span>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {loading ? <p className="muted-copy" role="status">Loading student roster…</p> : null}
-          {!loading && canManage && !attendanceOnly && !showStudentForm ? <div className="roster-toolbar"><label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search students" placeholder="Search students by name, admission no., phone, grade or section" value={search} onChange={(event) => setSearch(event.target.value)} /></label><button className="primary-button small-button" type="button" onClick={() => setShowStudentForm(true)}>＋ Add student</button></div> : null}
+          {!loading && !attendanceOnly && !showStudentForm ? <div className="roster-toolbar"><label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search students" placeholder="Search students by name, admission no., phone, grade or section" value={search} onChange={(event) => setSearch(event.target.value)} /></label>{canManage ? <button className="primary-button small-button" type="button" onClick={() => setShowStudentForm(true)}>＋ Add student</button> : null}</div> : null}
           {showStudentForm && canManage ? <form className="student-profile-form" onSubmit={createStudent}>
             <div className="student-form-heading"><div><h4>Student admission</h4><p>Enter the student profile and family contact details.</p></div><button className="quiet-button" type="button" onClick={() => setShowStudentForm(false)}>Cancel</button></div>
             <fieldset><legend>Student profile</legend><div className="student-form-grid">
@@ -424,9 +425,9 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                     <td>{student.phone || '—'}<small>{student.email || 'No email on file'}</small></td>
                     <td>{displayedEnrollment ? `${displayedEnrollment.grade.title} · ${displayedEnrollment.section.title}` : student.status === 'active' ? 'Not enrolled this year' : 'Archived'}<small>{displayedEnrollment?.academic_year || ''}{displayedEnrollment ? ` · ${displayedEnrollment.status}` : ''}</small></td>
                     <td><div className="academic-actions">
-                      <button className="quiet-button" type="button" onClick={() => onOpenStudent?.(student)}>View profile</button>
+                      <TableAction action="view" label="View profile" onClick={() => onOpenStudent?.(student)} />
                       {canManage ? <>
-                      <button className="quiet-button" type="button" onClick={() => {
+                      <TableAction action="edit" label={editingStudentId === student.id ? 'Cancel edit' : 'Edit student'} onClick={() => {
                         setEditStudentForm(studentEditValues(student))
                         setEditingStudentId(editingStudentId === student.id ? null : student.id)
                         setActiveStudentId(null)
@@ -435,18 +436,18 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                         setEditBFormFile(null)
                         setRemoveStudentPhoto(false)
                         setRemoveStudentBForm(false)
-                      }}>{editingStudentId === student.id ? 'Cancel edit' : 'Edit'}</button>
+                      }} />
                       {student.status === 'active' ? (
                         <>
-                          <button className="quiet-button" type="button" onClick={() => {
+                          <TableAction action="assign" label={student.current_enrollment ? 'Move class' : 'Enroll'} onClick={() => {
                             setActiveStudentId(activeStudentId === student.id ? null : student.id)
                             setEditingStudentId(null)
                             setGradeId(String(grades.find((grade) => grade.status === 'active')?.id || ''))
                             setSectionId('')
-                          }}>{student.current_enrollment ? 'Move class' : 'Enroll'}</button>
-                          <button className="quiet-button danger-action" type="button" onClick={() => archiveStudent(student)}>Archive</button>
+                          }} />
+                          <TableAction action="archive" label="Archive student" danger onClick={() => archiveStudent(student)} />
                         </>
-                      ) : <button className="quiet-button" type="button" onClick={() => restoreStudent(student)}>Restore</button>}
+                      ) : <TableAction action="restore" label="Restore student" onClick={() => restoreStudent(student)} />}
                       </> : null}
                     </div></td>
                   </tr>

@@ -630,3 +630,11 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
 .student-fee-history h5 { font-size: 15px; }
 .active-year-label,
 .active-year-label strong { font-size: 12px; }
+.module-search.table-search { margin: 12px 0 8px; }
+.roster-add-toolbar { justify-content: flex-end; }
+.crud-table td:last-child .table-action { margin: 0 5px 0 0; vertical-align: middle; }
+.table-action { width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; border: 1px solid #e5e8f0; border-radius: 8px; background: #fff; color: #64718e; cursor: pointer; transition: color .15s ease, background .15s ease, border-color .15s ease, transform .15s ease; }
+.table-action:hover { border-color: #ccd3f5; background: #f3f4ff; color: #5267d5; transform: translateY(-1px); }
+.table-action-danger { color: #bb665a; }
+.table-action-danger:hover { border-color: #f1d7d2; background: #fff4f1; color: #a74f44; }
+.table-action:disabled { opacity: .45; cursor: not-allowed; transform: none; }

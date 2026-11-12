@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
 import DataTools from './DataTools.jsx'
+import TableAction from './TableAction.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -282,7 +283,6 @@ export default function FeeSetup({ school, activeSection = 'all' }) {
     <section className="fee-setup" aria-labelledby={`fee-setup-title-${school.id}`}>
       <h4 id={`fee-setup-title-${school.id}`}>Fee setup</h4>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search fee records" placeholder="Search fee types, discounts, groups and monthly fee masters" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
       {(activeSection === 'all' || activeSection === 'fee-types') ? <section>
         <h5>Fee types</h5>
         <DataTools title="Fee types" rows={feeTypes} fields={[{ key: 'title', label: 'title', required: true }, { key: 'description', label: 'description' }]} canImport onImport={(row) => importFeeRecord('fee-types', row, setFeeTypes)} />
@@ -291,7 +291,8 @@ export default function FeeSetup({ school, activeSection = 'all' }) {
           <label htmlFor={`setup-type-description-${school.id}`}>Fee type description</label><textarea id={`setup-type-description-${school.id}`} value={typeDraft.description} onChange={(event) => setTypeDraft({ ...typeDraft, description: event.target.value })} />
           <button className="primary-button small-button" type="submit">Add fee type</button>
         </form>
-        <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Fee type</th><th>Description</th><th>Actions</th></tr></thead><tbody>{feeTypes.filter((item) => matches(item, search)).map((type) => <tr key={type.id}><td>{type.title}</td><td>{type.description || '—'}</td><td><button className="quiet-button" type="button" onClick={() => editType(type)}>Edit</button><button className="quiet-button danger-action" type="button" onClick={() => deleteType(type)}>Delete</button></td></tr>)}</tbody></table></div>
+        <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search fee types" placeholder="Search fee types" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+        <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Fee type</th><th>Description</th><th>Actions</th></tr></thead><tbody>{feeTypes.filter((item) => matches(item, search)).map((type) => <tr key={type.id}><td>{type.title}</td><td>{type.description || '—'}</td><td><TableAction action="edit" label="Edit fee type" onClick={() => editType(type)} /><TableAction action="delete" label="Delete fee type" danger onClick={() => deleteType(type)} /></td></tr>)}</tbody></table></div>
       </section> : null}
       {(activeSection === 'all' || activeSection === 'discounts') ? <section>
         <h5>Discounts</h5>
@@ -303,7 +304,8 @@ export default function FeeSetup({ school, activeSection = 'all' }) {
           <label htmlFor={`discount-description-${school.id}`}>Discount description</label><textarea id={`discount-description-${school.id}`} value={discountDraft.description} onChange={(event) => setDiscountDraft({ ...discountDraft, description: event.target.value })} />
           <button className="primary-button small-button" type="submit">Add discount</button>
         </form>
-        <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Discount</th><th>Type</th><th>Value</th><th>Description</th><th>Actions</th></tr></thead><tbody>{discounts.filter((item) => matches(item, search)).map((discount) => <tr key={discount.id}><td>{discount.title}</td><td>{discount.discount_type}</td><td>{discount.value}</td><td>{discount.description || '—'}</td><td><button className="quiet-button" type="button" onClick={() => editDiscount(discount)}>Edit</button><button className="quiet-button danger-action" type="button" onClick={() => deleteDiscount(discount)}>Delete</button></td></tr>)}</tbody></table></div>
+        <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search discounts" placeholder="Search discounts" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+        <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Discount</th><th>Type</th><th>Value</th><th>Description</th><th>Actions</th></tr></thead><tbody>{discounts.filter((item) => matches(item, search)).map((discount) => <tr key={discount.id}><td>{discount.title}</td><td>{discount.discount_type}</td><td>{discount.value}</td><td>{discount.description || '—'}</td><td><TableAction action="edit" label="Edit discount" onClick={() => editDiscount(discount)} /><TableAction action="delete" label="Delete discount" danger onClick={() => deleteDiscount(discount)} /></td></tr>)}</tbody></table></div>
       </section> : null}
       {(activeSection === 'all' || activeSection === 'groups') ? <section>
         <h5>Fee groups</h5>
@@ -316,7 +318,8 @@ export default function FeeSetup({ school, activeSection = 'all' }) {
           <button className="primary-button small-button" type="submit" disabled={busy}>{editingGroupId ? 'Save fee group' : 'Add fee group'}</button>
           {editingGroupId ? <button className="quiet-button" type="button" onClick={() => { setEditingGroupId(null); setGroupDraft({ title: '', description: '', allows_discount: true, grade_ids: [] }) }}>Cancel group edit</button> : null}
         </form>
-        <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Group</th><th>Grades</th><th>Discounts</th><th>Actions</th></tr></thead><tbody>{groups.filter((item) => matches({ title: item.title, grades: item.grades.map((grade) => grade.title).join(' ') }, search)).map((group) => <tr key={group.id}><td>{group.title}</td><td>{group.grades.map((grade) => grade.title).join(', ') || '—'}</td><td>{group.allows_discount ? 'Allowed' : 'Not allowed'}</td><td><button className="quiet-button" type="button" onClick={() => startEditGroup(group)}>Edit</button><button className="quiet-button danger-action" type="button" onClick={() => deleteGroup(group)}>Delete</button></td></tr>)}</tbody></table></div>
+        <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search fee groups" placeholder="Search fee groups" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+        <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Group</th><th>Grades</th><th>Discounts</th><th>Actions</th></tr></thead><tbody>{groups.filter((item) => matches({ title: item.title, grades: item.grades.map((grade) => grade.title).join(' ') }, search)).map((group) => <tr key={group.id}><td>{group.title}</td><td>{group.grades.map((grade) => grade.title).join(', ') || '—'}</td><td>{group.allows_discount ? 'Allowed' : 'Not allowed'}</td><td><TableAction action="edit" label="Edit fee group" onClick={() => startEditGroup(group)} /><TableAction action="delete" label="Delete fee group" danger onClick={() => deleteGroup(group)} /></td></tr>)}</tbody></table></div>
       </section> : null}
       {(activeSection === 'all' || activeSection === 'masters') ? <section>
         <h5>Fee masters</h5>
@@ -333,9 +336,10 @@ export default function FeeSetup({ school, activeSection = 'all' }) {
           <button className="primary-button small-button" type="submit" disabled={busy}>{editingMasterId ? 'Save fee master' : 'Add fee master'}</button>
           {editingMasterId ? <button className="quiet-button" type="button" onClick={() => { setEditingMasterId(null); setMasterDraft({ ...emptyMaster, school_session_id: String(sessions.find((session) => session.is_current)?.id || '') }) }}>Cancel master edit</button> : null}
         </form>
+        <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search fee masters" placeholder="Search fee masters" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
         <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Month and session</th><th>Fee group and type</th><th>Amount / due date</th><th>Fine</th><th>Actions</th></tr></thead><tbody>{masters.filter((master) => matches({ month: master.billing_month, year: master.school_session.title, group: master.fee_group.title, fee: master.fee_type.title }, search)).map((master) => {
           const isCurrentYear = String(master.school_session.id) === String(sessions.find((session) => session.is_current)?.id || '')
-          return <tr key={master.id}><td>{master.billing_month}<small>{master.school_session.title}</small></td><td>{master.fee_group.title}<small>{master.fee_type.title}</small></td><td>{master.amount}<small>Due {master.due_date}</small></td><td>{master.fine_type} · {master.fine_value}</td><td><button className="quiet-button" type="button" onClick={() => startEditMaster(master)} disabled={!isCurrentYear}>Edit</button><button className="quiet-button" type="button" onClick={() => openAssignments(master)} disabled={!isCurrentYear}>Assign</button><button className="quiet-button danger-action" type="button" onClick={() => deleteMaster(master)}>Delete</button></td></tr>
+          return <tr key={master.id}><td>{master.billing_month}<small>{master.school_session.title}</small></td><td>{master.fee_group.title}<small>{master.fee_type.title}</small></td><td>{master.amount}<small>Due {master.due_date}</small></td><td>{master.fine_type} · {master.fine_value}</td><td><TableAction action="edit" label="Edit fee master" onClick={() => startEditMaster(master)} disabled={!isCurrentYear} /><TableAction action="assign" label="Assign students" onClick={() => openAssignments(master)} disabled={!isCurrentYear} /><TableAction action="delete" label="Delete fee master" danger onClick={() => deleteMaster(master)} /></td></tr>
         })}</tbody></table></div>
         {assignmentMaster ? <div className="fee-assignment-panel">
           <div className="academic-section-heading"><h5>Assign {assignmentMaster.fee_type.title} · {assignmentMaster.billing_month}</h5><button className="quiet-button" type="button" onClick={() => setAssignmentMaster(null)}>Close</button></div>

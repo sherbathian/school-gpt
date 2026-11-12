@@ -73,6 +73,9 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const [photoFile, setPhotoFile] = useState(null)
   const [bFormFile, setBFormFile] = useState(null)
   const [search, setSearch] = useState('')
+  const [studentPage, setStudentPage] = useState(1)
+  const [studentPageSize, setStudentPageSize] = useState(10)
+  const [studentSort, setStudentSort] = useState({ key: 'student_name', direction: 'asc' })
   const [activeStudentId, setActiveStudentId] = useState(null)
   const [editingStudentId, setEditingStudentId] = useState(null)
   const [editStudentForm, setEditStudentForm] = useState(null)
@@ -152,7 +155,22 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const availableSections = selectedGrade?.sections.filter((section) => section.status === 'active') || []
   const attendanceGrade = grades.find((grade) => String(grade.id) === attendanceGradeId)
   const attendanceSections = attendanceGrade?.sections.filter((section) => section.status === 'active') || []
-  const visibleStudents = students.filter((student) => `${student.admission_number} ${student.first_name} ${student.last_name} ${student.phone || ''} ${student.email || ''} ${student.current_enrollment?.grade?.title || ''} ${student.current_enrollment?.section?.title || ''}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const filteredStudents = students.filter((student) => `${student.admission_number} ${student.first_name} ${student.last_name} ${student.phone || ''} ${student.email || ''} ${student.current_enrollment?.grade?.title || ''} ${student.current_enrollment?.section?.title || ''}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const sortedStudents = [...filteredStudents].sort((left, right) => {
+    const value = (student) => ({ student_name: `${student.last_name} ${student.first_name}`, phone: student.phone || '', grade: student.current_enrollment?.grade?.title || '', admission_number: student.admission_number || '' })[studentSort.key] || ''
+    const comparison = String(value(left)).localeCompare(String(value(right)), undefined, { numeric: true, sensitivity: 'base' })
+    return studentSort.direction === 'asc' ? comparison : -comparison
+  })
+  const studentPageCount = Math.max(1, Math.ceil(sortedStudents.length / studentPageSize))
+  const safeStudentPage = Math.min(studentPage, studentPageCount)
+  const visibleStudents = sortedStudents.slice((safeStudentPage - 1) * studentPageSize, safeStudentPage * studentPageSize)
+  useEffect(() => { setStudentPage(1) }, [search, studentPageSize])
+  useEffect(() => { if (studentPage > studentPageCount) setStudentPage(studentPageCount) }, [studentPage, studentPageCount])
+
+  function studentSortHeader(label, key) {
+    const active = studentSort.key === key
+    return <button className="student-sort-button" type="button" onClick={() => setStudentSort({ key, direction: active && studentSort.direction === 'asc' ? 'desc' : 'asc' })}>{label}<span aria-hidden="true">{active ? (studentSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span></button>
+  }
 
   function enrollmentForYear(student) {
     return student.enrollments.find((enrollment) => enrollment.academic_year === academicYear) || null
@@ -374,7 +392,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
         <div className="academic-panel">
           <div className="academic-section-heading">
             <h4>Students</h4>
-            <span>{visibleStudents.length}</span>
+            <span>{filteredStudents.length}</span>
           </div>
           {selectedStudentId ? <section className="student-profile-page" aria-label="Student profile">
             <button className="quiet-button student-back-button" type="button" onClick={onCloseStudent}>← Back to students</button>
@@ -414,7 +432,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
             <div className="student-form-actions"><button className="primary-button small-button" type="submit">Save student</button><button className="quiet-button" type="button" onClick={() => setShowStudentForm(false)}>Cancel</button></div>
           </form> : null}
           {!loading && visibleStudents.length ? (
-            <div className="crud-table-wrap"><table className="crud-table student-roster-table"><colgroup><col className="student-column" /><col className="contact-column" /><col className="enrollment-column" /><col className="actions-column" /></colgroup><thead><tr><th>Student</th><th>Contact</th><th>Current enrollment</th><th>Actions</th></tr></thead><tbody>
+            <div className="crud-table-wrap"><table className="crud-table student-roster-table"><colgroup><col className="student-column" /><col className="contact-column" /><col className="enrollment-column" /><col className="actions-column" /></colgroup><thead><tr><th>{studentSortHeader('Student', 'student_name')}</th><th>{studentSortHeader('Contact', 'phone')}</th><th>{studentSortHeader('Current enrollment', 'grade')}</th><th>Actions</th></tr></thead><tbody>
               {visibleStudents.map((student) => {
                 const displayedEnrollment = enrollmentForYear(student)
 
@@ -494,6 +512,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
               })}
             </tbody></table></div>
           ) : null}
+          {!loading && filteredStudents.length > 0 ? <footer className="student-pagination"><span>Showing {(safeStudentPage - 1) * studentPageSize + 1} to {Math.min(safeStudentPage * studentPageSize, sortedStudents.length)} of {sortedStudents.length} students</span><label>Rows per page<select aria-label="Students per page" value={studentPageSize} onChange={(event) => setStudentPageSize(Number(event.target.value))}><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label><nav aria-label="Student table pagination"><button type="button" disabled={safeStudentPage <= 1} onClick={() => setStudentPage(safeStudentPage - 1)}>‹</button>{Array.from({ length: studentPageCount }, (_, index) => index + 1).map((page) => <button type="button" key={page} className={safeStudentPage === page ? 'active' : ''} aria-current={safeStudentPage === page ? 'page' : undefined} onClick={() => setStudentPage(page)}>{page}</button>)}<button type="button" disabled={safeStudentPage >= studentPageCount} onClick={() => setStudentPage(safeStudentPage + 1)}>›</button></nav></footer> : null}
           {!loading && visibleStudents.length === 0 ? <p className="muted-copy">No students match this search. Add a student or import a student CSV to get started.</p> : null}
           {canTakeAttendance && (attendanceOnly || !standalone) ? (
             <>

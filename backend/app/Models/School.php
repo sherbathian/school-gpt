@@ -76,6 +76,16 @@ class School extends Model
         return $this->hasMany(FeeMaster::class);
     }
 
+    public function expenseHeads(): HasMany
+    {
+        return $this->hasMany(ExpenseHead::class);
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
     public function schoolSessions(): HasMany
     {
         return $this->hasMany(SchoolSession::class);

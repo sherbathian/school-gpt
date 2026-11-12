@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FeeDiscountController;
 use App\Http\Controllers\Api\FeeGroupController;
 use App\Http\Controllers\Api\FeeInvoiceController;
@@ -44,6 +45,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('schools/{school}/fee-masters/{feeMaster}/assignments', [FeeMasterController::class, 'assignments']);
     Route::post('schools/{school}/fee-masters/{feeMaster}/assignments', [FeeMasterController::class, 'assignStudents']);
     Route::apiResource('schools.fee-masters', FeeMasterController::class);
+    Route::get('/schools/{school}/expense-heads', [ExpenseController::class, 'heads']);
+    Route::post('/schools/{school}/expense-heads', [ExpenseController::class, 'storeHead']);
+    Route::patch('/schools/{school}/expense-heads/{head}', [ExpenseController::class, 'updateHead']);
+    Route::delete('/schools/{school}/expense-heads/{head}', [ExpenseController::class, 'destroyHead']);
+    Route::get('/schools/{school}/expenses', [ExpenseController::class, 'index']);
+    Route::post('/schools/{school}/expenses', [ExpenseController::class, 'store']);
+    Route::patch('/schools/{school}/expenses/{expense}', [ExpenseController::class, 'update']);
+    Route::delete('/schools/{school}/expenses/{expense}', [ExpenseController::class, 'destroy']);
     Route::get('/schools/{school}/staff-lookups/{lookupType}', [StaffLookupController::class, 'index']);
     Route::post('/schools/{school}/staff-lookups/{lookupType}', [StaffLookupController::class, 'store']);
     Route::patch('/schools/{school}/staff-lookups/{lookupType}/{lookup}', [StaffLookupController::class, 'update']);
@@ -93,3 +102,7 @@ Route::get('/schools/{school}/guardians/{guardian}/media/{kind}', [GuardianContr
     ->where('kind', 'father|mother|guardian')
     ->middleware('signed:relative')
     ->name('guardians.media');
+
+Route::get('/schools/{school}/expenses/{expense}/attachment', [ExpenseController::class, 'attachment'])
+    ->middleware('signed:relative')
+    ->name('expenses.attachment');

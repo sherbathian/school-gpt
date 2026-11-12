@@ -12,7 +12,11 @@ return new class extends Migration
         Schema::rename('fee_types', 'legacy_fee_types');
         Schema::create('fee_types', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->restrictOnDelete();
+            $table->foreignId('school_id');
+            $table->foreign('school_id', 'fee_types_catalog_school_fk')
+                ->references('id')
+                ->on('schools')
+                ->restrictOnDelete();
             $table->string('title', 150);
             $table->text('description')->nullable();
             $table->timestamps();

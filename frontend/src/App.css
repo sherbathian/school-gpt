@@ -604,3 +604,29 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
   .student-profile-actions { width: 100%; margin-left: 76px; }
   .student-form-actions { flex-wrap: wrap; }
 }
+
+/* Larger workspace body scale to match the reference dashboard. */
+.active-module-page { font-size: 15px; }
+.active-module-page .crud-table { font-size: 15px; }
+.active-module-page .crud-table th { font-size: 12px; }
+.active-module-page .crud-table td small { font-size: 13px; }
+.active-module-page .muted-copy,
+.active-module-page .form-error,
+.active-module-page .data-tools-message { font-size: 14px; }
+.active-module-page .quiet-button,
+.active-module-page .data-tools .secondary-button,
+.active-module-page .export-control,
+.active-module-page .export-control select { font-size: 14px; }
+.active-module-page .module-search input { font-size: 15px; }
+.student-form-grid label,
+.student-profile-form legend,
+.student-edit-panel legend { font-size: 13px; }
+.student-form-grid input,
+.student-form-grid select,
+.student-form-grid textarea { font-size: 14px; }
+.student-detail-grid dt { font-size: 12px; }
+.student-detail-grid dd { font-size: 14px; }
+.student-detail-grid h5,
+.student-fee-history h5 { font-size: 15px; }
+.active-year-label,
+.active-year-label strong { font-size: 12px; }

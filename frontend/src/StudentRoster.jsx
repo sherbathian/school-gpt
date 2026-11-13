@@ -248,7 +248,6 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const attendanceGrade = grades.find((grade) => String(grade.id) === attendanceGradeId)
   const attendanceSections = attendanceGrade?.sections.filter((section) => section.status === 'active') || []
   const filteredStudents = students
-  const sortedStudents = students
   const studentPageCount = Math.max(1, Number(studentMeta.last_page || 1))
   const safeStudentPage = Math.min(studentPage, studentPageCount)
   useEffect(() => { if (studentPage > studentPageCount) setStudentPage(studentPageCount) }, [studentPage, studentPageCount])
@@ -539,9 +538,9 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
             <fieldset><legend>Parent / guardian</legend><div className="student-guardian-select-row"><label>Find a guardian<input aria-label="Search guardians for student" placeholder="Search parent name, ID, phone or CNIC" value={guardianLookupSearch} onChange={(event) => setGuardianLookupSearch(event.target.value)} /></label><label>Select a guardian<select value={studentForm.guardian_id} onChange={(event) => setStudentForm((current) => ({ ...current, guardian_id: event.target.value }))}><option value="">No guardian selected</option>{guardians.map((guardian) => <option key={guardian.id} value={guardian.id}>#{guardian.source_parent_id || guardian.id} · {guardian.father_name} / {guardian.mother_name}{guardian.father_phone ? ` · ${guardian.father_phone}` : ''}</option>)}</select></label><button className="quiet-button" type="button" onClick={() => onNavigate?.('guardians')}>Manage guardians</button></div>{guardians.length === 0 ? <p className="muted-copy">Add a guardian first, then select them here.</p> : null}</fieldset>
             <div className="student-form-actions"><button className="primary-button small-button" type="submit">Save student</button><button className="quiet-button" type="button" onClick={() => setShowStudentForm(false)}>Cancel</button></div>
           </form> : null}
-          {!loading && visibleStudents.length ? (
+          {!loading && filteredStudents.length ? (
             <div className="crud-table-wrap"><table className="crud-table student-roster-table"><colgroup><col className="student-column" /><col className="contact-column" /><col className="enrollment-column" /><col className="actions-column" /></colgroup><thead><tr><th>{studentSortHeader('Student', 'student_name')}</th><th>{studentSortHeader('Contact', 'phone')}</th><th>{studentSortHeader('Current enrollment', 'grade')}</th><th>Actions</th></tr></thead><tbody>
-              {visibleStudents.map((student) => {
+              {filteredStudents.map((student) => {
                 const displayedEnrollment = enrollmentForYear(student)
 
                 return (
@@ -624,7 +623,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
             </tbody></table></div>
           ) : null}
           {!loading && filteredStudents.length > 0 ? <TablePagination meta={studentMeta} page={safeStudentPage} perPage={studentPageSize} label="students" onPageChange={setStudentPage} onPerPageChange={setStudentPageSize} /> : null}
-          {!loading && visibleStudents.length === 0 ? <p className="muted-copy">No students match this search. Add a student or import a student CSV to get started.</p> : null}
+          {!loading && filteredStudents.length === 0 ? <p className="muted-copy">No students match this search. Add a student or import a student CSV to get started.</p> : null}
           {canTakeAttendance && (attendanceOnly || !standalone) ? (
             <>
               <button className="team-toggle attendance-toggle" type="button" aria-expanded={attendanceOpen} onClick={() => setAttendanceOpen((current) => !current)}>

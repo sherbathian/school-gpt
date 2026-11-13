@@ -747,6 +747,37 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
 @media (max-width: 1100px) { .attendance-filter-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 650px) { .attendance-filter-form { grid-template-columns: 1fr; } .attendance-filter-form > .small-button { justify-self: start; } }
 .expense-module { display: grid; gap: 18px; }
+.expense-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.expense-page-heading .eyebrow { margin: 0 0 4px; color: #6575d5; font-size: 11px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.expense-page-heading h2 { margin: 0; color: #303a54; font-size: 23px; letter-spacing: -.02em; }
+.expense-page-heading p:not(.eyebrow) { margin: 5px 0 0; color: #8993a8; font-size: 14px; }
+.expense-list-toolbar { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 14px; border: 1px solid #e8ebf2; border-radius: 10px; background: #fff; }
+.expense-list-toolbar > .module-search { min-width: 220px; flex: 1 1 260px; margin: 0; }
+.expense-list-toolbar > .data-tools { flex: 0 1 auto; min-width: 0; margin: 0; }
+.expense-list-toolbar .data-tools-actions { justify-content: flex-start; }
+.expense-list-toolbar .data-tools-actions > :first-child { margin-right: 0; }
+.expense-record-count { color: #8791a6; font-size: 13px; white-space: nowrap; }
+.expense-list-toolbar > .primary-button { flex: 0 0 auto; margin: 0; white-space: nowrap; }
+.expense-form-panel { display: grid; gap: 18px; margin: 0; padding: 22px; border: 1px solid #e8ebf2; border-radius: 12px; background: #fff; box-shadow: 0 4px 18px rgba(45, 57, 88, .04); }
+.expense-form-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.expense-form-heading .eyebrow { margin: 0 0 3px; color: #6575d5; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.expense-form-heading h3 { margin: 0; color: #303a54; font-size: 19px; }
+.expense-form-heading p:not(.eyebrow) { margin: 5px 0 0; color: #778198; font-size: 13px; }
+.expense-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.expense-form-grid > label { min-width: 0; display: grid; gap: 6px; color: #59647c; font-size: 13px; font-weight: 650; }
+.expense-form-grid > label span { color: #c16254; }
+.expense-form-grid input:not([type="file"]), .expense-form-grid select, .expense-form-grid textarea { width: 100%; min-width: 0; min-height: 42px; padding: 8px 10px; border: 1px solid #dfe4ef; border-radius: 7px; background: #fff; color: #303a54; font: inherit; font-size: 14px; }
+.expense-form-grid textarea { resize: vertical; }
+.expense-form-grid input[type="file"] { max-width: 100%; color: #67738d; font: inherit; font-size: 12px; }
+.expense-form-grid label small { color: #8993a8; font-size: 11px; font-weight: 500; }
+.expense-head-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.expense-head-form-grid > label:nth-child(2) { grid-column: 1 / -1; }
+.expense-description-field { grid-column: 1 / -1; }
+.expense-form-panel > .student-form-actions { margin-top: 0; }
+.expense-list-card { padding-bottom: 2px; }
+.expense-list-card > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.expense-list-card > header > span { padding: 6px 9px; border-radius: 999px; background: #f1f3ff; color: #596bd4; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.expense-list-card .expense-table-footer { border-top: 1px solid #edf0f5; }
 .expense-two-column { display: grid; grid-template-columns: minmax(280px, .72fr) minmax(0, 1.55fr); align-items: start; gap: 20px; }
 .expense-add-layout { grid-template-columns: minmax(300px, .8fr) minmax(0, 1.7fr); }
 .expense-card { min-width: 0; padding: 0; overflow: hidden; border: 1px solid #e8ebf2; border-radius: 12px; background: #fff; box-shadow: 0 5px 18px rgba(40, 52, 80, .04); }
@@ -790,7 +821,8 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
 .expense-report-heading > strong { padding: 8px 12px; border-radius: 8px; background: #f0f2ff; color: #5265cc; font-size: 15px; white-space: nowrap; }
 .expense-success { margin: 0; padding: 11px 14px; border: 1px solid #d5eadc; border-radius: 8px; background: #f3fbf5; color: #31724a; font-size: 14px; }
 @media (max-width: 1000px) { .expense-two-column, .expense-add-layout { grid-template-columns: 1fr; } }
-@media (max-width: 650px) { .expense-criteria-grid { grid-template-columns: 1fr; padding: 15px; } .expense-search-wide { grid-column: auto; } .expense-table-footer { align-items: flex-start; flex-direction: column; } .expense-table-footer nav { align-self: flex-end; } .expense-report-heading { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 760px) { .expense-list-toolbar { align-items: stretch; flex-wrap: wrap; } .expense-list-toolbar > .module-search { flex-basis: 100%; } .expense-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .expense-criteria-grid { grid-template-columns: 1fr; padding: 15px; } .expense-search-wide { grid-column: auto; } .expense-table-footer { align-items: flex-start; flex-direction: column; } .expense-table-footer nav { align-self: flex-end; } .expense-report-heading { align-items: flex-start; flex-direction: column; } .expense-form-panel { padding: 15px; } .expense-form-grid, .expense-head-form-grid { grid-template-columns: 1fr; } .expense-head-form-grid > label:nth-child(2), .expense-description-field { grid-column: auto; } .expense-form-heading { align-items: flex-start; } .expense-list-toolbar > .data-tools { flex: 1 1 100%; } .expense-list-toolbar > .primary-button { margin-left: auto; } }
 @media (max-width: 760px) { .student-pagination { grid-template-columns: 1fr auto; } .student-pagination-count { grid-column: 1 / -1; } .student-pagination nav { justify-self: end; } }
 @media (max-width: 440px) { .student-pagination { grid-template-columns: 1fr; gap: 10px; } .student-pagination-count { grid-column: auto; } .student-pagination nav { justify-self: start; max-width: 100%; } .student-pagination nav button { min-width: 31px; height: 32px; } }
 .student-navigator-count { flex: 0 0 auto; color: #8791a6; font-size: 13px; white-space: nowrap; }

@@ -395,7 +395,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
     { title: 'GUARDIANS', items: [['guardians', '♙', 'Guardians']] },
     { title: 'ACADEMICS', items: [['academic-sections', '▤', 'Sections'], ['academic-grades', '▤', 'Grades'], ['academic-subjects', '◈', 'Subjects'], ['academic-years', '◷', 'Academic years']] },
     { title: 'FINANCE', items: [['fees-catalog', '＄', 'Fee catalog'], ['fees-discounts', '%', 'Discounts'], ['fees-groups', '▣', 'Fee groups'], ['fees-masters', '▤', 'Fee masters'], ['fee-items', '＋', 'Invoice fee items'], ['invoices', '▧', 'Invoices & payments'], ['family-fee-receipts', '▤', 'Family fee receipts'], ['expense-heads', '▤', 'Expense heads'], ['expense-add', '＋', 'Add expense'], ['expense-search', '⌕', 'Search expenses']] },
-    { title: 'PEOPLE', items: [['staff-directory', '♙', 'Staff'], ['staff-create', '＋', 'Add staff'], ['staff-designations', '◇', 'Designations'], ['staff-departments', '▥', 'Departments'], ['staff-leave-types', '◷', 'Leave types']] },
+    { title: 'HR', items: [['staff-directory', '♙', 'Staff'], ['staff-designations', '◇', 'Designations'], ['staff-departments', '▥', 'Departments'], ['staff-leave-types', '◷', 'Leave types']] },
     { title: 'ACCESS', items: [['roles', '♢', 'Roles & permissions'], ...(user.is_super_admin ? [['users', '♟', 'User accounts']] : [])] },
   ].map((group) => ({
     ...group,
@@ -430,7 +430,6 @@ export default function SchoolWorkspace({ user, onLogout }) {
           {activeSchool.active_session?.academic_year ? <small>{activeSchool.active_session.academic_year}</small> : null}
           {sessionError ? <small className="sidebar-session-error" role="alert">{sessionError}</small> : null}
         </div> : null}
-        <p className="sidebar-label">WORKSPACE</p>
         <nav className="dashboard-nav" aria-label="Workspace pages">
           {navGroups.map((group) => <div className="dashboard-nav-group" key={group.title}>
             <p className="sidebar-label">{group.title}</p>

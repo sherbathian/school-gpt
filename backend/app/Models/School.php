@@ -71,6 +71,11 @@ class School extends Model
         return $this->hasMany(FamilyFeeReceipt::class);
     }
 
+    public function legacyFeeSnapshots(): HasMany
+    {
+        return $this->hasMany(LegacyStudentFeeSnapshot::class);
+    }
+
     public function feeDiscounts(): HasMany
     {
         return $this->hasMany(FeeDiscount::class);

@@ -27,19 +27,64 @@ class StudentController extends Controller
         $schoolRecord = $this->accessibleSchool($request, $school, 'view');
         $validated = $request->validate([
             'academic_year' => ['sometimes', 'string', 'regex:/^\d{4}-\d{4}$/', 'max:20'],
+            'page' => ['sometimes', 'integer', 'min:1'], 'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'sort' => ['sometimes', 'string', 'in:student_name,admission_number,phone,grade,section,status'],
+            'direction' => ['sometimes', 'string', 'in:asc,desc'],
         ]);
         $studentsQuery = $schoolRecord->students()
-            ->with('guardian', 'enrollments.grade:id,title', 'enrollments.section:id,title', 'lifecycleEvents')
-            ->orderBy('last_name')
-            ->orderBy('first_name');
+            ->with([
+                'guardian:id,school_id,source_parent_id,father_name,father_phone,father_occupation,father_cnic,mother_name,mother_phone,mother_occupation,mother_cnic,is_guardian_other,guardian_name,guardian_relation,guardian_email,guardian_phone,guardian_occupation,guardian_cnic,guardian_address',
+                'enrollments.grade:id,title', 'enrollments.section:id,title', 'lifecycleEvents',
+            ])
+            ->orderBy('last_name')->orderBy('first_name');
+
+        $term = trim((string) ($validated['search'] ?? ''));
+        if ($term !== '') {
+            $studentsQuery->where(function ($query) use ($term): void {
+                $query->where('admission_number', 'like', "%{$term}%")
+                    ->orWhere('first_name', 'like', "%{$term}%")
+                    ->orWhere('last_name', 'like', "%{$term}%")
+                    ->orWhere('phone', 'like', "%{$term}%")
+                    ->orWhere('email', 'like', "%{$term}%")
+                    ->orWhere('status', 'like', "%{$term}%")
+                    ->orWhereHas('guardian', fn ($guardian) => $guardian->where('father_name', 'like', "%{$term}%")
+                        ->orWhere('mother_name', 'like', "%{$term}%")
+                        ->orWhere('father_phone', 'like', "%{$term}%")
+                        ->orWhere('mother_phone', 'like', "%{$term}%"))
+                    ->orWhereHas('enrollments.grade', fn ($grade) => $grade->where('title', 'like', "%{$term}%"))
+                    ->orWhereHas('enrollments.section', fn ($section) => $section->where('title', 'like', "%{$term}%"));
+            });
+        }
 
         if (isset($validated['academic_year'])) {
             $studentsQuery->whereHas('enrollments', fn ($query) => $query->where('academic_year', $validated['academic_year']));
         }
 
-        $students = $studentsQuery->get();
+        $sort = $validated['sort'] ?? 'student_name';
+        $direction = $validated['direction'] ?? 'asc';
+        if ($sort === 'student_name') {
+            $studentsQuery->reorder()->orderBy('last_name', $direction)->orderBy('first_name', $direction);
+        } elseif (in_array($sort, ['grade', 'section'], true)) {
+            $relation = $sort === 'grade' ? 'grade_id' : 'section_id';
+            $studentsQuery->reorder()->orderBy(Enrollment::query()->select($relation)
+                ->whereColumn('student_id', 'students.id')->where('status', 'active')->orderByDesc('id')->limit(1), $direction);
+        } else {
+            $studentsQuery->reorder()->orderBy($sort, $direction);
+        }
+        $studentsQuery->orderBy('id');
+        $usePagination = $request->hasAny(['page', 'per_page', 'search', 'sort', 'direction']);
+        if (! $usePagination) {
+            $students = $studentsQuery->get();
 
-        return response()->json(['data' => $students->map(fn (Student $student) => $this->studentData($student))->values()]);
+            return response()->json(['data' => $students->map(fn (Student $student) => $this->studentData($student))->values()]);
+        }
+        $students = $studentsQuery->paginate($validated['per_page'] ?? 25)->appends($request->query());
+
+        return response()->json([
+            'data' => $students->getCollection()->map(fn (Student $student) => $this->studentData($student))->values(),
+            'meta' => ['current_page' => $students->currentPage(), 'last_page' => $students->lastPage(), 'per_page' => $students->perPage(), 'total' => $students->total(), 'from' => $students->firstItem(), 'to' => $students->lastItem()],
+        ]);
     }
 
     public function store(Request $request, int $school): JsonResponse

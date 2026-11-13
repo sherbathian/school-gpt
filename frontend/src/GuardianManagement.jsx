@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
 import DataTools from './DataTools.jsx'
 import TableAction from './TableAction.jsx'
+import TablePagination from './TablePagination.jsx'
 
 const textFields = [
   ['father_name', 'Father name', 'text'], ['father_phone', 'Father phone', 'tel'], ['father_occupation', 'Father occupation', 'text'], ['father_cnic', 'Father CNIC', 'text'],
@@ -22,9 +23,20 @@ async function readData(response) {
   return result.data
 }
 
+async function readPage(response) {
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(Object.values(result.errors || {}).flat()[0] || result.message || 'That request could not be completed.')
+  return result
+}
+
 export default function GuardianManagement({ school, canManage, onNavigate, onOpenStudent }) {
   const [guardians, setGuardians] = useState([])
   const [search, setSearch] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [perPage, setPerPage] = useState(25)
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 25, total: 0, from: null, to: null })
+  const [sort, setSort] = useState({ key: 'father_name', direction: 'asc' })
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [parentId, setParentId] = useState('')
@@ -38,23 +50,59 @@ export default function GuardianManagement({ school, canManage, onNavigate, onOp
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  async function refresh() {
-    setGuardians(await readData(await apiRequest(`/api/schools/${school.id}/guardians`)))
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(search.trim()), 250)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => { setPage(1) }, [searchQuery, perPage])
+
+  async function loadGuardians(signal) {
+    const params = new URLSearchParams({ page: String(page), per_page: String(perPage), search: searchQuery, sort: sort.key, direction: sort.direction })
+    const result = await readPage(await apiRequest(`/api/schools/${school.id}/guardians?${params}`, signal ? { signal } : undefined))
+    setGuardians(result.data)
+    setMeta(result.meta)
+  }
+
+  async function loadAllGuardians() {
+    const getPage = async (requestedPage) => {
+      const params = new URLSearchParams({ page: String(requestedPage), per_page: '100', search: searchQuery, sort: sort.key, direction: sort.direction })
+      return readPage(await apiRequest(`/api/schools/${school.id}/guardians?${params}`))
+    }
+    const first = await getPage(1)
+    const all = [...first.data]
+    for (let start = 2; start <= first.meta.last_page; start += 5) {
+      const pages = await Promise.all(Array.from({ length: Math.min(5, first.meta.last_page - start + 1) }, (_, index) => getPage(start + index)))
+      pages.forEach((result) => all.push(...result.data))
+    }
+    return all
   }
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
     setLoading(true)
     setError('')
-    apiRequest(`/api/schools/${school.id}/guardians`)
-      .then(readData)
-      .then((data) => { if (!cancelled) setGuardians(data) })
-      .catch((loadError) => { if (!cancelled) setError(loadError.message) })
+    loadGuardians(controller.signal)
+      .catch((loadError) => { if (!cancelled && loadError.name !== 'AbortError') setError(loadError.message) })
       .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [school.id])
+    return () => { cancelled = true; controller.abort() }
+  }, [school.id, page, perPage, searchQuery, sort.key, sort.direction])
 
-  const visibleGuardians = useMemo(() => guardians.filter((guardian) => Object.values(guardian).join(' ').toLowerCase().includes(search.trim().toLowerCase())), [guardians, search])
+  function sortBy(key) {
+    setPage(1)
+    setSort((current) => ({ key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' }))
+  }
+
+  function sortHeader(key, label) {
+    const active = sort.key === key
+    return <button className="student-sort-button" type="button" onClick={() => sortBy(key)}>{label}<span aria-hidden="true">{active ? (sort.direction === 'asc' ? '↑' : '↓') : '↕'}</span></button>
+  }
+
+  function refresh() {
+    setLoading(true)
+    return loadGuardians().catch((loadError) => setError(loadError.message)).finally(() => setLoading(false))
+  }
 
   function startCreate() {
     setEditingId(null)
@@ -101,8 +149,10 @@ export default function GuardianManagement({ school, canManage, onNavigate, onOp
       Object.entries(removeFiles).forEach(([key, value]) => payload.append(`remove_${key}_doc`, value ? '1' : '0'))
       if (editingId) payload.append('_method', 'PATCH')
       const updated = await readData(await apiRequest(`/api/schools/${school.id}/guardians${editingId ? `/${editingId}` : ''}`, { method: 'POST', body: payload }))
-      setGuardians((current) => editingId ? current.map((item) => item.id === editingId ? updated : item) : [...current, updated].sort((left, right) => left.father_name.localeCompare(right.father_name)))
+      if (editingId) setGuardians((current) => current.map((item) => item.id === editingId ? { ...item, ...updated } : item))
+      else setPage(1)
       setShowForm(false)
+      if (!editingId) void refresh()
     } catch (saveError) { setError(saveError.message) } finally { setBusy(false) }
   }
 
@@ -111,8 +161,7 @@ export default function GuardianManagement({ school, canManage, onNavigate, onOp
     if (row.source_data) {
       try { payload.source_data = JSON.parse(row.source_data) } catch { throw new Error('source_data must contain valid JSON.') }
     }
-    const created = await readData(await apiRequest(`/api/schools/${school.id}/guardians`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }))
-    setGuardians((current) => [...current, created].sort((left, right) => left.father_name.localeCompare(right.father_name)))
+    await readData(await apiRequest(`/api/schools/${school.id}/guardians`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }))
   }
 
   async function deleteGuardian(guardian) {
@@ -121,6 +170,8 @@ export default function GuardianManagement({ school, canManage, onNavigate, onOp
     try {
       await readData(await apiRequest(`/api/schools/${school.id}/guardians/${guardian.id}`, { method: 'DELETE' }))
       setGuardians((current) => current.filter((item) => item.id !== guardian.id))
+      setMeta((current) => ({ ...current, total: Math.max(0, current.total - 1) }))
+      if (guardians.length === 1 && page > 1) setPage((current) => current - 1)
     } catch (deleteError) { setError(deleteError.message) }
   }
 
@@ -144,13 +195,14 @@ export default function GuardianManagement({ school, canManage, onNavigate, onOp
         <section className="guardian-children-card"><div className="academic-section-heading"><h5>Children</h5><span>{selectedGuardian.children?.length || 0}</span></div>{selectedGuardian.children?.length ? <div className="crud-table-wrap"><table className="crud-table guardian-children-table"><thead><tr><th>Student</th><th>Admission number</th><th>Current class</th><th>Status</th><th>Actions</th></tr></thead><tbody>{selectedGuardian.children.map((child) => <tr key={child.id}><td>{child.last_name}, {child.first_name}</td><td>{child.admission_number}</td><td>{child.current_enrollment ? `${child.current_enrollment.grade || '—'} · ${child.current_enrollment.section || '—'}` : 'Not enrolled'}<small>{child.current_enrollment?.academic_year || ''}</small></td><td>{child.status}</td><td><TableAction action="view" label={`View ${child.first_name} ${child.last_name}`} onClick={() => { onNavigate?.('students'); onOpenStudent?.(child) }} /></td></tr>)}</tbody></table></div> : <p className="muted-copy">No students are linked to this guardian yet.</p>}</section>
       </>}
     </section> : !showForm ? <>
-      <div className="directory-heading"><div><h4 id={`guardians-heading-${school.id}`}>Guardians</h4><p>Manage parent and guardian details for {school.name}.</p></div><span>{guardians.length} {guardians.length === 1 ? 'guardian' : 'guardians'}</span></div>
+      <div className="directory-heading"><div><h4 id={`guardians-heading-${school.id}`}>Guardians</h4><p>Manage parent and guardian details for {school.name}.</p></div><span>{meta.total} {meta.total === 1 ? 'guardian' : 'guardians'}</span></div>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      {canManage ? <DataTools title="Guardians" rows={guardians} fields={importFields} exportFields={exportFields} canImport onImport={importGuardian} /> : null}
+      {canManage ? <DataTools title="Guardians" rows={guardians} fields={importFields} exportFields={exportFields} canImport onImport={importGuardian} onImportComplete={refresh} loadExportRows={loadAllGuardians} /> : null}
       <div className="guardian-list-toolbar"><label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search guardians" placeholder="Search by parent ID, parent name, phone or CNIC" value={search} onChange={(event) => setSearch(event.target.value)} /></label>{canManage ? <button className="primary-button small-button" type="button" onClick={startCreate}>＋ New guardian</button> : null}</div>
       {loading ? <p className="muted-copy" role="status">Loading guardians…</p> : null}
-      {!loading && visibleGuardians.length ? <div className="crud-table-wrap"><table className="crud-table guardian-table"><thead><tr><th>Parent ID</th><th>Father name</th><th>Father phone</th><th>Father occupation</th><th>Father CNIC</th><th>Mother name</th><th>Students</th><th>Actions</th></tr></thead><tbody>{visibleGuardians.map((guardian) => <tr key={guardian.id}><td>{guardian.id}</td><td>{guardian.father_name}</td><td>{guardian.father_phone || '—'}</td><td>{guardian.father_occupation || '—'}</td><td>{guardian.father_cnic}</td><td>{guardian.mother_name}</td><td>{guardian.students_count || 0}</td><td><TableAction action="view" label="View guardian and children" onClick={() => openDetails(guardian)} />{canManage ? <><TableAction action="edit" label="Edit guardian" onClick={() => startEdit(guardian)} disabled={busy} /><TableAction action="delete" label="Delete guardian" danger onClick={() => deleteGuardian(guardian)} /></> : null}</td></tr>)}</tbody></table></div> : null}
-      {!loading && visibleGuardians.length === 0 ? <p className="muted-copy">No guardians match this search. Add a guardian or import a CSV file to get started.</p> : null}
+      {!loading && guardians.length ? <div className="crud-table-wrap"><table className="crud-table guardian-table"><thead><tr><th>{sortHeader('source_parent_id', 'Parent ID')}</th><th>{sortHeader('father_name', 'Father name')}</th><th>{sortHeader('father_phone', 'Father phone')}</th><th>{sortHeader('father_occupation', 'Father occupation')}</th><th>{sortHeader('father_cnic', 'Father CNIC')}</th><th>{sortHeader('mother_name', 'Mother name')}</th><th>{sortHeader('students_count', 'Students')}</th><th>Actions</th></tr></thead><tbody>{guardians.map((guardian) => <tr key={guardian.id}><td>{guardian.source_parent_id || guardian.id}</td><td>{guardian.father_name || '—'}</td><td>{guardian.father_phone || '—'}</td><td>{guardian.father_occupation || '—'}</td><td>{guardian.father_cnic || '—'}</td><td>{guardian.mother_name || '—'}</td><td>{guardian.students_count || 0}</td><td><TableAction action="view" label="View guardian and children" onClick={() => openDetails(guardian)} />{canManage ? <><TableAction action="edit" label="Edit guardian" onClick={() => startEdit(guardian)} disabled={busy} /><TableAction action="delete" label="Delete guardian" danger onClick={() => deleteGuardian(guardian)} /></> : null}</td></tr>)}</tbody></table></div> : null}
+      {!loading && guardians.length === 0 ? <p className="muted-copy">No guardians match this search. Add a guardian or import a CSV file to get started.</p> : null}
+      {!loading ? <TablePagination meta={meta} page={page} perPage={perPage} label="guardians" onPageChange={setPage} onPerPageChange={setPerPage} /> : null}
     </> : <form className="guardian-profile-form" onSubmit={saveGuardian}>
       <div className="student-form-heading"><div><p className="eyebrow">Guardians</p><h4>{editingId ? 'Edit guardian' : 'Create guardian'}</h4><p>Enter parent details and attach supporting documents.</p></div><button className="quiet-button" type="button" onClick={() => setShowForm(false)}>Cancel</button></div>
       {error ? <p className="form-error" role="alert">{error}</p> : null}

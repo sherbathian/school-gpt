@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
 import DataTools from './DataTools.jsx'
 import TableAction from './TableAction.jsx'
+import TablePagination from './TablePagination.jsx'
 
 const LOOKUPS = [
   { key: 'designations', label: 'Designations' },
@@ -15,9 +16,19 @@ async function readData(response) {
   return result.data
 }
 
+async function readPage(response) {
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(result.message || Object.values(result.errors || {}).flat()[0] || 'That request could not be completed.')
+  return result
+}
+
 export default function StaffManagement({ school, canManage, activeView = 'staff-directory', onNavigate }) {
   const [lookups, setLookups] = useState({ designations: [], departments: [], 'leave-types': [] })
   const [staff, setStaff] = useState([])
+  const [staffMeta, setStaffMeta] = useState({ current_page: 1, last_page: 1, per_page: 25, total: 0, from: null, to: null })
+  const [staffLoading, setStaffLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [perPage, setPerPage] = useState(25)
   const [sessions, setSessions] = useState([])
   const [users, setUsers] = useState([])
   const [error, setError] = useState('')
@@ -29,20 +40,75 @@ export default function StaffManagement({ school, canManage, activeView = 'staff
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState({ first_name: '', last_name: '' })
   const [search, setSearch] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sort, setSort] = useState({ key: 'last_name', direction: 'asc' })
   const [lookupSearch, setLookupSearch] = useState('')
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(search.trim()), 250)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => { setPage(1) }, [searchQuery, perPage])
+
+  async function loadStaff(signal) {
+    const params = new URLSearchParams({ page: String(page), per_page: String(perPage), search: searchQuery, sort: sort.key, direction: sort.direction })
+    const result = await readPage(await apiRequest(`/api/schools/${school.id}/staff?${params}`, signal ? { signal } : undefined))
+    setStaff(result.data)
+    setStaffMeta(result.meta)
+  }
+
+  async function loadAllStaff() {
+    const getPage = async (requestedPage) => {
+      const params = new URLSearchParams({ page: String(requestedPage), per_page: '100', search: searchQuery, sort: sort.key, direction: sort.direction })
+      return readPage(await apiRequest(`/api/schools/${school.id}/staff?${params}`))
+    }
+    const first = await getPage(1)
+    const all = [...first.data]
+    for (let start = 2; start <= first.meta.last_page; start += 5) {
+      const pages = await Promise.all(Array.from({ length: Math.min(5, first.meta.last_page - start + 1) }, (_, index) => getPage(start + index)))
+      pages.forEach((result) => all.push(...result.data))
+    }
+    return all
+  }
+
+  function refresh() {
+    if (activeView !== 'staff-directory') return Promise.resolve()
+    setStaffLoading(true)
+    return loadStaff().catch((loadError) => setError(loadError.message)).finally(() => setStaffLoading(false))
+  }
+
+  function sortBy(key) {
+    setPage(1)
+    setSort((current) => ({ key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' }))
+  }
+
+  function sortHeader(key, label) {
+    const active = sort.key === key
+    return <button className="student-sort-button" type="button" onClick={() => sortBy(key)}>{label}<span aria-hidden="true">{active ? (sort.direction === 'asc' ? '↑' : '↓') : '↕'}</span></button>
+  }
+
+  useEffect(() => {
+    if (activeView !== 'staff-directory') return undefined
+    let active = true
+    const controller = new AbortController()
+    setStaffLoading(true)
+    loadStaff(controller.signal)
+      .catch((loadError) => { if (active && loadError.name !== 'AbortError') setError(loadError.message) })
+      .finally(() => { if (active) setStaffLoading(false) })
+    return () => { active = false; controller.abort() }
+  }, [school.id, page, perPage, searchQuery, sort.key, sort.direction, activeView])
 
   useEffect(() => {
     let active = true
     async function load() {
       try {
-        const [staffRows, ...results] = await Promise.all([
-          apiRequest(`/api/schools/${school.id}/staff`).then(readData),
+        const results = await Promise.all([
           ...LOOKUPS.map(({ key }) => apiRequest(`/api/schools/${school.id}/staff-lookups/${key}`).then(readData)),
           apiRequest(`/api/schools/${school.id}/sessions`).then(readData),
           canManage ? apiRequest(`/api/schools/${school.id}/users`).then(readData) : Promise.resolve([]),
         ])
         if (!active) return
-        setStaff(staffRows)
         setLookups({ designations: results[0], departments: results[1], 'leave-types': results[2] })
         setSessions(results[3])
         setUsers(results[4])
@@ -110,8 +176,8 @@ export default function StaffManagement({ school, canManage, activeView = 'staff
       const created = await readData(await apiRequest(`/api/schools/${school.id}/staff`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       }))
-      setStaff((current) => [...current, created].sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)))
       setForm({ staff_no: '', first_name: '', last_name: '', designation_id: '', department_id: '', gender: 'female', marital_status: '', birth_date: '', joining_date: '', basic_salary: '0.00', user_id: '' })
+      setPage(1)
       onNavigate?.('staff-directory')
     } catch (requestError) { setError(requestError.message) }
   }
@@ -120,11 +186,10 @@ export default function StaffManagement({ school, canManage, activeView = 'staff
     const designation = lookups.designations.find((item) => item.title.toLowerCase() === row.designation.toLowerCase())
     const department = lookups.departments.find((item) => item.title.toLowerCase() === row.department.toLowerCase())
     if (!designation || !department) throw new Error('Designation or department does not match this school’s lookup list.')
-    const person = await readData(await apiRequest(`/api/schools/${school.id}/staff`, {
+    await readData(await apiRequest(`/api/schools/${school.id}/staff`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ staff_no: row.staff_no, first_name: row.first_name, last_name: row.last_name, designation_id: designation.id, department_id: department.id, gender: row.gender, birth_date: row.birth_date, joining_date: row.joining_date, basic_salary: row.basic_salary }),
     }))
-    setStaff((current) => [...current, person].sort((left, right) => `${left.last_name} ${left.first_name}`.localeCompare(`${right.last_name} ${right.first_name}`)))
   }
 
   async function saveName(person) {
@@ -135,6 +200,7 @@ export default function StaffManagement({ school, canManage, activeView = 'staff
       }))
       setStaff((current) => current.map((row) => row.id === updated.id ? updated : row))
       setEditingId(null)
+      void refresh()
     } catch (requestError) { setError(requestError.message) }
   }
 
@@ -144,10 +210,12 @@ export default function StaffManagement({ school, canManage, activeView = 'staff
     try {
       await readData(await apiRequest(`/api/schools/${school.id}/staff/${person.id}`, { method: 'DELETE' }))
       setStaff((current) => current.filter((row) => row.id !== person.id))
+      setStaffMeta((current) => ({ ...current, total: Math.max(0, current.total - 1) }))
+      if (staff.length === 1 && page > 1) setPage((current) => current - 1)
     } catch (requestError) { setError(requestError.message) }
   }
 
-  const visibleStaff = staff.filter((person) => `${person.staff_no} ${person.first_name} ${person.last_name} ${person.designation} ${person.department} ${person.status}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const visibleStaff = staff
 
   async function toggleBalances(person) {
     setExpandedId((current) => current === person.id ? null : person.id)
@@ -205,7 +273,7 @@ export default function StaffManagement({ school, canManage, activeView = 'staff
 
   return (
     <section className="academic-panel" aria-labelledby={`staff-title-${school.id}`}>
-      <div className="directory-heading"><h4 id={`staff-title-${school.id}`}>{activeView === 'staff-create' ? 'Add staff member' : activeView === 'staff-directory' ? 'Staff' : LOOKUPS.find(({ key }) => `staff-${key}` === activeView)?.label}</h4>{activeView === 'staff-directory' ? <span>{staff.length} {staff.length === 1 ? 'person' : 'people'}</span> : null}</div>
+      <div className="directory-heading"><h4 id={`staff-title-${school.id}`}>{activeView === 'staff-create' ? 'Add staff member' : activeView === 'staff-directory' ? 'Staff' : LOOKUPS.find(({ key }) => `staff-${key}` === activeView)?.label}</h4>{activeView === 'staff-directory' ? <span>{staffMeta.total} {staffMeta.total === 1 ? 'person' : 'people'}</span> : null}</div>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       {canManage ? (
         <>
@@ -241,16 +309,17 @@ export default function StaffManagement({ school, canManage, activeView = 'staff
           </form> : null}
         </>
       ) : null}
-      {activeView === 'staff-directory' ? <>{canManage ? <div className="roster-toolbar roster-add-toolbar"><span /> <button className="primary-button small-button" type="button" onClick={() => onNavigate?.('staff-create')}>＋ Add staff</button></div> : null}<DataTools title="Staff" rows={staff} fields={[{ key: 'staff_no', label: 'staff_no', required: true }, { key: 'first_name', label: 'first_name', required: true }, { key: 'last_name', label: 'last_name', required: true }, { key: 'designation', label: 'designation', required: true }, { key: 'department', label: 'department', required: true }, { key: 'gender', label: 'gender', required: true }, { key: 'birth_date', label: 'birth_date', required: true }, { key: 'joining_date', label: 'joining_date', required: true }, { key: 'basic_salary', label: 'basic_salary', required: true }, { key: 'status', label: 'status' }]} exportFields={[{ key: 'staff_no', label: 'staff_no' }, { key: 'first_name', label: 'first_name' }, { key: 'last_name', label: 'last_name' }, { key: 'designation', label: 'designation' }, { key: 'department', label: 'department' }, { key: 'gender', label: 'gender' }, { key: 'joining_date', label: 'joining_date' }, { key: 'status', label: 'status' }]} canImport={canManage} onImport={importStaff} /><label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search staff" placeholder="Search staff by name, staff no., designation or department" value={search} onChange={(event) => setSearch(event.target.value)} /></label></> : null}
-      {activeView === 'staff-directory' && visibleStaff.length ? <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Staff member</th><th>Staff number</th><th>Designation / department</th><th>Actions</th></tr></thead><tbody>{visibleStaff.map((person) => (
+      {activeView === 'staff-directory' ? <>{canManage ? <div className="roster-toolbar roster-add-toolbar"><span /> <button className="primary-button small-button" type="button" onClick={() => onNavigate?.('staff-create')}>＋ Add staff</button></div> : null}<DataTools title="Staff" rows={staff} fields={[{ key: 'staff_no', label: 'staff_no', required: true }, { key: 'first_name', label: 'first_name', required: true }, { key: 'last_name', label: 'last_name', required: true }, { key: 'designation', label: 'designation', required: true }, { key: 'department', label: 'department', required: true }, { key: 'gender', label: 'gender', required: true }, { key: 'birth_date', label: 'birth_date', required: true }, { key: 'joining_date', label: 'joining_date', required: true }, { key: 'basic_salary', label: 'basic_salary', required: true }, { key: 'status', label: 'status' }]} exportFields={[{ key: 'staff_no', label: 'staff_no' }, { key: 'first_name', label: 'first_name' }, { key: 'last_name', label: 'last_name' }, { key: 'designation', label: 'designation' }, { key: 'department', label: 'department' }, { key: 'gender', label: 'gender' }, { key: 'joining_date', label: 'joining_date' }, { key: 'status', label: 'status' }]} canImport={canManage} onImport={importStaff} onImportComplete={refresh} loadExportRows={loadAllStaff} /><label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search staff" placeholder="Search staff by name, staff no., designation or department" value={search} onChange={(event) => setSearch(event.target.value)} /></label></> : null}
+      {activeView === 'staff-directory' && staffLoading ? <p className="muted-copy" role="status">Loading staff records…</p> : null}
+      {activeView === 'staff-directory' && !staffLoading && visibleStaff.length ? <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>{sortHeader('last_name', 'Staff member')}</th><th>{sortHeader('staff_no', 'Staff number')}</th><th>{sortHeader('designation', 'Designation')}</th><th>{sortHeader('department', 'Department')}</th><th>{sortHeader('status', 'Status')}</th><th>Actions</th></tr></thead><tbody>{visibleStaff.map((person) => (
         <Fragment key={person.id}>
-          <tr><td>{person.last_name}, {person.first_name}<small>{person.status}</small></td><td>{person.staff_no}</td><td>{person.designation} · {person.department}</td><td>{canManage ? <><TableAction action="edit" label="Edit staff member" onClick={() => { setEditingId(person.id); setEditName({ first_name: person.first_name, last_name: person.last_name }) }} /><TableAction action="archive" label="Archive staff member" danger onClick={() => archiveStaff(person)} /></> : null}<TableAction action="balances" label="Leave balances" expanded={expandedId === person.id} onClick={() => toggleBalances(person)} /></td></tr>
-          {editingId === person.id ? <tr><td colSpan="4"><form className="member-form-row" onSubmit={(event) => { event.preventDefault(); saveName(person) }}>
+          <tr><td>{person.last_name}, {person.first_name}</td><td>{person.staff_no}</td><td>{person.designation}</td><td>{person.department}</td><td>{person.status}</td><td>{canManage ? <><TableAction action="edit" label="Edit staff member" onClick={() => { setEditingId(person.id); setEditName({ first_name: person.first_name, last_name: person.last_name }) }} /><TableAction action="archive" label="Archive staff member" danger onClick={() => archiveStaff(person)} /></> : null}<TableAction action="balances" label="Leave balances" expanded={expandedId === person.id} onClick={() => toggleBalances(person)} /></td></tr>
+          {editingId === person.id ? <tr><td colSpan="6"><form className="member-form-row" onSubmit={(event) => { event.preventDefault(); saveName(person) }}>
             <label htmlFor={`edit-staff-first-${person.id}`}>First name</label><input id={`edit-staff-first-${person.id}`} value={editName.first_name} onChange={(event) => setEditName({ ...editName, first_name: event.target.value })} required />
             <label htmlFor={`edit-staff-last-${person.id}`}>Last name</label><input id={`edit-staff-last-${person.id}`} value={editName.last_name} onChange={(event) => setEditName({ ...editName, last_name: event.target.value })} required />
             <button className="quiet-button" type="submit">Save profile</button><button className="quiet-button" type="button" onClick={() => setEditingId(null)}>Cancel</button>
           </form></td></tr> : null}
-          {expandedId === person.id ? <tr><td colSpan="4"><div className="staff-balance-panel">
+          {expandedId === person.id ? <tr><td colSpan="6"><div className="staff-balance-panel">
             <DataTools title={`Leave balances ${person.staff_no}`} rows={balances} fields={[{ key: 'leave_type_id', label: 'leave_type_id', required: true }, { key: 'school_session_id', label: 'school_session_id', required: true }, { key: 'allocated', label: 'allocated', required: true }, { key: 'used', label: 'used', required: true }]} canImport={canManage} onImport={(row) => importBalance(person, row)} />
             <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Leave type</th><th>Session</th><th>Used / allocated</th><th>Actions</th></tr></thead><tbody>{balances.map((balance) => <tr key={balance.id}><td>{balance.leave_type?.title}</td><td>{balance.school_session?.title}</td><td>{balance.used} / {balance.allocated} days</td><td>{canManage ? <><TableAction action="edit" label="Edit leave balance" onClick={() => editBalance(balance, person)} /><TableAction action="delete" label="Delete leave balance" danger onClick={() => deleteBalance(balance, person)} /></> : null}</td></tr>)}</tbody></table></div>
             {canManage ? <form className="add-staff-form" onSubmit={(event) => addBalance(event, person)}>
@@ -262,7 +331,8 @@ export default function StaffManagement({ school, canManage, activeView = 'staff
             </form> : null}
           </div></td></tr> : null}
         </Fragment>
-      ))}</tbody></table></div> : activeView === 'staff-directory' ? <p className="muted-copy">No staff records yet.</p> : null}
+      ))}</tbody></table></div> : activeView === 'staff-directory' && !staffLoading ? <p className="muted-copy">No staff records match this search.</p> : null}
+      {activeView === 'staff-directory' && !staffLoading ? <TablePagination meta={staffMeta} page={page} perPage={perPage} label="staff members" onPageChange={setPage} onPerPageChange={setPerPage} /> : null}
     </section>
   )
 }

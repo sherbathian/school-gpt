@@ -75,7 +75,7 @@ function xmlText(value) {
   return printableText(/^[=+\-@\t\r]/.test(String(value ?? '')) ? `'${value}` : value).replaceAll("'", '&apos;')
 }
 
-export default function DataTools({ title, rows, fields, exportFields = fields, canImport = false, onImport, onImportBatch }) {
+export default function DataTools({ title, rows, fields, exportFields = fields, canImport = false, onImport, onImportBatch, loadExportRows, onImportComplete }) {
   const fileInput = useRef(null)
   const [preparedRows, setPreparedRows] = useState([])
   const [message, setMessage] = useState('')
@@ -85,13 +85,17 @@ export default function DataTools({ title, rows, fields, exportFields = fields, 
   const headers = fields.map((field) => field.label)
   const exportHeaders = exportFields.map((field) => field.label)
 
-  function exportData(format) {
+  async function exportData(format) {
+    setBusy(true)
+    setMessage('')
+    try {
+    const exportRows = loadExportRows ? await loadExportRows() : rows
     const stamp = new Date().toISOString().slice(0, 10)
-    const values = rows.map((row) => exportKeys.map((key) => row[key] ?? ''))
+    const values = exportRows.map((row) => exportKeys.map((key) => row[key] ?? ''))
     if (format === 'csv') {
       downloadFile(`${title.toLowerCase().replaceAll(' ', '-')}-${stamp}.csv`, [exportHeaders, ...values].map((line) => line.map(csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8')
     } else if (format === 'json') {
-      downloadFile(`${title.toLowerCase().replaceAll(' ', '-')}-${stamp}.json`, JSON.stringify(rows.map((row) => Object.fromEntries(exportKeys.map((key) => [key, row[key] ?? null]))), null, 2), 'application/json')
+      downloadFile(`${title.toLowerCase().replaceAll(' ', '-')}-${stamp}.json`, JSON.stringify(exportRows.map((row) => Object.fromEntries(exportKeys.map((key) => [key, row[key] ?? null]))), null, 2), 'application/json')
     } else if (format === 'excel') {
       const sheetRows = [exportHeaders, ...values].map((line) => `<Row>${line.map((value) => `<Cell><Data ss:Type="String">${xmlText(value)}</Data></Cell>`).join('')}</Row>`).join('')
       const workbook = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="${xmlText(title.slice(0, 31))}"><Table>${sheetRows}</Table></Worksheet></Workbook>`
@@ -107,7 +111,12 @@ export default function DataTools({ title, rows, fields, exportFields = fields, 
       printWindow.document.write(`<html><head><title>${printableText(title)}</title><style>body{font:12px Arial;padding:24px;color:#26324d}h1{font-size:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #dfe3eb;text-align:left}tr:nth-child(even){background:#f3f5fa}</style></head><body><h1>${printableText(title)}</h1><table>${table}</table><script>window.onload=()=>window.print()</script></body></html>`)
       printWindow.document.close()
     }
-    setMessage(`${rows.length} ${title.toLowerCase()} records exported.`)
+    setMessage(`${exportRows.length} ${title.toLowerCase()} records exported.`)
+    } catch (error) {
+      setMessage(error.message || `Could not export ${title.toLowerCase()} records.`)
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function selectFile(event) {
@@ -155,6 +164,7 @@ export default function DataTools({ title, rows, fields, exportFields = fields, 
       }
       setPreparedRows([])
       setBusy(false)
+      onImportComplete?.()
       setMessage(summarizeImport(title, imported, failures))
       return
     }
@@ -172,6 +182,7 @@ export default function DataTools({ title, rows, fields, exportFields = fields, 
     }
     setPreparedRows([])
     setBusy(false)
+    onImportComplete?.()
     setMessage(summarizeImport(title, imported, failures))
   }
 
@@ -184,7 +195,7 @@ export default function DataTools({ title, rows, fields, exportFields = fields, 
           <input ref={fileInput} className="visually-hidden" type="file" accept=".csv,text/csv" onChange={selectFile} />
         </> : null}
         <label className="export-control">Export
-          <select aria-label={`Export ${title} as`} value="" onChange={(event) => { const format = event.target.value; event.target.value = ''; if (format) exportData(format) }}>
+          <select aria-label={`Export ${title} as`} value="" disabled={busy} onChange={(event) => { const format = event.target.value; event.target.value = ''; if (format) void exportData(format) }}>
             <option value="">Choose format</option><option value="csv">CSV</option><option value="excel">Excel (.xls)</option><option value="json">JSON</option><option value="pdf">Print / PDF</option>
           </select>
         </label>

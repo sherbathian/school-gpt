@@ -20,9 +20,43 @@ class GuardianController extends Controller
     public function index(Request $request, int $school): JsonResponse
     {
         $schoolRecord = $this->accessibleSchool($request, $school, 'view');
-        $guardians = $schoolRecord->guardians()->orderBy('father_name')->orderBy('id')->get();
+        $validated = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'sort' => ['sometimes', 'string', 'in:id,source_parent_id,father_name,father_phone,father_occupation,father_cnic,mother_name,students_count'],
+            'direction' => ['sometimes', 'string', 'in:asc,desc'],
+        ]);
+        $query = $schoolRecord->guardians()
+            ->select(['id', 'school_id', 'source_parent_id', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'father_doc_path', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'mother_doc_path', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address', 'guardian_doc_path'])
+            ->withCount('students');
+        $term = trim((string) ($validated['search'] ?? ''));
+        if ($term !== '') {
+            $query->where(function ($builder) use ($term): void {
+                foreach (['source_parent_id', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'mother_name', 'mother_phone', 'mother_cnic', 'guardian_name', 'guardian_phone', 'guardian_cnic'] as $column) {
+                    $builder->orWhere($column, 'like', "%{$term}%");
+                }
+            });
+        }
+        $sort = $validated['sort'] ?? 'father_name';
+        $direction = $validated['direction'] ?? 'asc';
+        $query->orderBy($sort === 'students_count' ? 'students_count' : $sort, $direction)->orderBy('id');
+        $usePagination = $request->hasAny(['page', 'per_page', 'search', 'sort', 'direction']);
+        if (! $usePagination) {
+            $guardians = $query->get();
 
-        return response()->json(['data' => $guardians->map(fn (Guardian $guardian): array => $this->guardianData($guardian))->values()]);
+            return response()->json(['data' => $guardians->map(fn (Guardian $guardian): array => $this->guardianData($guardian))->values()]);
+        }
+        $guardians = $query->paginate($validated['per_page'] ?? 25)->appends($request->query());
+
+        return response()->json([
+            'data' => $guardians->getCollection()->map(fn (Guardian $guardian): array => $this->guardianData($guardian))->values(),
+            'meta' => [
+                'current_page' => $guardians->currentPage(), 'last_page' => $guardians->lastPage(),
+                'per_page' => $guardians->perPage(), 'total' => $guardians->total(),
+                'from' => $guardians->firstItem(), 'to' => $guardians->lastItem(),
+            ],
+        ]);
     }
 
     public function store(Request $request, int $school): JsonResponse
@@ -181,7 +215,7 @@ class GuardianController extends Controller
             'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone',
             'guardian_occupation', 'guardian_cnic', 'guardian_address', 'guardian_doc_path',
         ]);
-        $data['students_count'] = $guardian->students()->count();
+        $data['students_count'] = $guardian->students_count ?? $guardian->students()->count();
         if ($includeMediaUrls) {
             foreach (['father', 'mother', 'guardian'] as $kind) {
                 if ($guardian->{"{$kind}_doc_path"}) {

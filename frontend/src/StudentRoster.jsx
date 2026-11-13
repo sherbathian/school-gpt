@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { apiRequest } from './api.js'
 import DataTools from './DataTools.jsx'
 import TableAction from './TableAction.jsx'
+import TablePagination from './TablePagination.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -10,6 +11,12 @@ async function readData(response) {
     throw new Error(validationMessage || result.message || 'That request could not be completed.')
   }
   return result.data
+}
+
+async function readPage(response) {
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(Object.values(result.errors || {}).flat()[0] || result.message || 'That request could not be completed.')
+  return result
 }
 
 function currentAcademicYear() {
@@ -76,6 +83,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const [students, setStudents] = useState([])
   const [grades, setGrades] = useState([])
   const [guardians, setGuardians] = useState([])
+  const [guardianLookupSearch, setGuardianLookupSearch] = useState('')
   const [admissionNumber, setAdmissionNumber] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -84,8 +92,10 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const [photoFile, setPhotoFile] = useState(null)
   const [bFormFile, setBFormFile] = useState(null)
   const [search, setSearch] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [studentPage, setStudentPage] = useState(1)
   const [studentPageSize, setStudentPageSize] = useState(10)
+  const [studentMeta, setStudentMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0, from: null, to: null })
   const [studentSort, setStudentSort] = useState({ key: 'student_name', direction: 'asc' })
   const [activeStudentId, setActiveStudentId] = useState(null)
   const [lifecycleStudentId, setLifecycleStudentId] = useState(null)
@@ -116,6 +126,56 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const [attendanceLoading, setAttendanceLoading] = useState(false)
   const [attendanceSaving, setAttendanceSaving] = useState(false)
   const [error, setError] = useState('')
+
+  async function loadStudentPage(signal) {
+    const params = new URLSearchParams({ page: String(studentPage), per_page: String(studentPageSize), search: searchQuery, sort: studentSort.key, direction: studentSort.direction })
+    const result = await readPage(await apiRequest(`/api/schools/${school.id}/students?${params}`, signal ? { signal } : undefined))
+    setStudents(result.data)
+    setStudentMeta(result.meta)
+  }
+
+  async function loadAllStudents() {
+    const getPage = async (requestedPage) => {
+      const params = new URLSearchParams({ page: String(requestedPage), per_page: '100', search: searchQuery, sort: studentSort.key, direction: studentSort.direction })
+      return readPage(await apiRequest(`/api/schools/${school.id}/students?${params}`))
+    }
+    const first = await getPage(1)
+    const all = [...first.data]
+    for (let start = 2; start <= first.meta.last_page; start += 5) {
+      const pages = await Promise.all(Array.from({ length: Math.min(5, first.meta.last_page - start + 1) }, (_, index) => getPage(start + index)))
+      pages.forEach((result) => all.push(...result.data))
+    }
+    return all
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(search.trim()), 250)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    if (!open || !loaded) return undefined
+    const term = guardianLookupSearch.trim()
+    if (!term) return undefined
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ page: '1', per_page: '100', search: term, sort: 'father_name', direction: 'asc' })
+        const result = await readPage(await apiRequest(`/api/schools/${school.id}/guardians?${params}`, { signal: controller.signal }))
+        if (!controller.signal.aborted) setGuardians((current) => {
+          const selectedId = String(editStudentForm?.guardian_id || studentForm.guardian_id || '')
+          const selected = current.find((guardian) => String(guardian.id) === selectedId)
+          return selected && !result.data.some((guardian) => String(guardian.id) === selectedId) ? [selected, ...result.data] : result.data
+        })
+      } catch (lookupError) {
+        if (!controller.signal.aborted) setError(lookupError.message)
+      }
+    }, 250)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [open, loaded, school.id, guardianLookupSearch])
+
+  useEffect(() => { setStudentPage(1) }, [searchQuery, studentPageSize])
+
   useEffect(() => {
     if (!admissionSeed) return
     setStudentForm((current) => ({ ...current, first_name: admissionSeed.first_name || '', last_name: admissionSeed.last_name || '' }))
@@ -129,13 +189,11 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
       setLoading(true)
       setError('')
       try {
-        const [studentResponse, gradeResponse, guardianResponse] = await Promise.all([
-          apiRequest(`/api/schools/${school.id}/students`, { signal: controller.signal }),
+        const [gradeResponse, guardianResponse] = await Promise.all([
           apiRequest(`/api/schools/${school.id}/grades`, { signal: controller.signal }),
-          apiRequest(`/api/schools/${school.id}/guardians`, { signal: controller.signal }),
+          apiRequest(`/api/schools/${school.id}/guardians?page=1&per_page=100`, { signal: controller.signal }),
         ])
-        const [studentData, gradeData, guardianData] = await Promise.all([readData(studentResponse), readData(gradeResponse), readData(guardianResponse)])
-        setStudents(studentData)
+        const [gradeData, guardianData] = await Promise.all([readData(gradeResponse), readData(guardianResponse)])
         setGrades(gradeData)
         setGuardians(guardianData)
         setGradeId(String(gradeData.find((grade) => grade.status === 'active')?.id || ''))
@@ -151,6 +209,17 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
     loadRoster()
     return () => controller.abort()
   }, [open, loaded, school.id, academicYear])
+
+  useEffect(() => {
+    if (!open || !loaded || attendanceOnly) return undefined
+    const controller = new AbortController()
+    setLoading(true)
+    setError('')
+    loadStudentPage(controller.signal)
+      .catch((loadError) => { if (!controller.signal.aborted && loadError.name !== 'AbortError') setError(loadError.message) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [open, loaded, attendanceOnly, school.id, studentPage, studentPageSize, searchQuery, studentSort.key, studentSort.direction])
 
   useEffect(() => {
     if (!selectedStudentId) {
@@ -178,28 +247,25 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const availableSections = selectedGrade?.sections.filter((section) => section.status === 'active') || []
   const attendanceGrade = grades.find((grade) => String(grade.id) === attendanceGradeId)
   const attendanceSections = attendanceGrade?.sections.filter((section) => section.status === 'active') || []
-  const filteredStudents = students.filter((student) => `${student.admission_number} ${student.first_name} ${student.last_name} ${student.phone || ''} ${student.email || ''} ${student.status || ''} ${student.guardian?.father_name || ''} ${student.guardian?.mother_name || ''} ${student.guardian?.father_phone || ''} ${student.guardian?.mother_phone || ''} ${student.current_enrollment?.grade?.title || ''} ${student.current_enrollment?.section?.title || ''}`.toLowerCase().includes(search.trim().toLowerCase()))
-  const sortedStudents = [...filteredStudents].sort((left, right) => {
-    const value = (student) => ({ student_name: `${student.last_name} ${student.first_name}`, phone: student.phone || '', grade: student.current_enrollment?.grade?.title || '', admission_number: student.admission_number || '' })[studentSort.key] || ''
-    const comparison = String(value(left)).localeCompare(String(value(right)), undefined, { numeric: true, sensitivity: 'base' })
-    return studentSort.direction === 'asc' ? comparison : -comparison
-  })
-  const studentPageCount = Math.max(1, Math.ceil(sortedStudents.length / studentPageSize))
+  const filteredStudents = students
+  const sortedStudents = students
+  const studentPageCount = Math.max(1, Number(studentMeta.last_page || 1))
   const safeStudentPage = Math.min(studentPage, studentPageCount)
-  const visibleStudents = sortedStudents.slice((safeStudentPage - 1) * studentPageSize, safeStudentPage * studentPageSize)
-  const pagerPages = Array.from({ length: studentPageCount }, (_, index) => index + 1)
-    .filter((page) => page === 1 || page === studentPageCount || Math.abs(page - safeStudentPage) <= 1)
-    .reduce((items, page, index, pages) => {
-      if (index && page - pages[index - 1] > 1) items.push(`ellipsis-${page}`)
-      items.push(page)
-      return items
-    }, [])
-  useEffect(() => { setStudentPage(1) }, [search, studentPageSize])
   useEffect(() => { if (studentPage > studentPageCount) setStudentPage(studentPageCount) }, [studentPage, studentPageCount])
 
   function studentSortHeader(label, key) {
     const active = studentSort.key === key
-    return <button className="student-sort-button" type="button" onClick={() => setStudentSort({ key, direction: active && studentSort.direction === 'asc' ? 'desc' : 'asc' })}>{label}<span aria-hidden="true">{active ? (studentSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span></button>
+    return <button className="student-sort-button" type="button" onClick={() => { setStudentPage(1); setStudentSort({ key, direction: active && studentSort.direction === 'asc' ? 'desc' : 'asc' }) }}>{label}<span aria-hidden="true">{active ? (studentSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span></button>
+  }
+
+  function exportStudentRow(student) {
+    const enrollment = enrollmentForYear(student)
+    return { ...student, guardian_source_parent_id: student.guardian?.source_parent_id || '', ...Object.fromEntries(Object.entries(student.guardian || {}).map(([key, value]) => [`guardian_${key}`, value])), grade: enrollment?.grade?.title || '', section: enrollment?.section?.title || '', academic_year: enrollment?.academic_year || '', enrollment_history: student.enrollments.map((item) => `${item.academic_year}: ${item.grade?.title || ''} / ${item.section?.title || ''} (${item.status})`).join(' | ') }
+  }
+
+  async function refreshStudentPage() {
+    setLoading(true)
+    try { await loadStudentPage() } catch (loadError) { setError(loadError.message) } finally { setLoading(false) }
   }
 
   function enrollmentForYear(student) {
@@ -218,7 +284,8 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
         method: 'POST',
         body: payload,
       }))
-      setStudents((current) => [...current, student].sort((left, right) => `${left.last_name} ${left.first_name}`.localeCompare(`${right.last_name} ${right.first_name}`)))
+      setStudentPage(1)
+      void refreshStudentPage()
       if (admissionSeed && onAdmissionComplete) {
         try { await onAdmissionComplete(admissionSeed, student) } catch (linkError) { setError(`Student profile saved, but the inquiry could not be marked registered: ${linkError.message}`) }
       }
@@ -236,7 +303,12 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
 
   async function importStudent(row) {
     const guardianParentId = String(row.guardian_source_parent_id || '').trim()
-    const linkedGuardian = guardianParentId ? guardians.find((item) => String(item.source_parent_id) === guardianParentId) : null
+    let linkedGuardian = guardianParentId ? guardians.find((item) => String(item.source_parent_id) === guardianParentId) : null
+    if (guardianParentId && !linkedGuardian) {
+      const params = new URLSearchParams({ page: '1', per_page: '100', search: guardianParentId })
+      const matches = await readPage(await apiRequest(`/api/schools/${school.id}/guardians?${params}`))
+      linkedGuardian = matches.data.find((item) => String(item.source_parent_id) === guardianParentId) || null
+    }
     const guardian = Object.fromEntries(Object.entries(row).filter(([key]) => key.startsWith('guardian_') && !['guardian_id', 'guardian_source_parent_id'].includes(key)).map(([key, value]) => [key.slice(9), value]))
     const parseSource = (value) => {
       if (!value) return undefined
@@ -248,11 +320,12 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }))
-    setStudents((current) => [...current, student].sort((left, right) => `${left.last_name} ${left.first_name}`.localeCompare(`${right.last_name} ${right.first_name}`)))
   }
 
   async function importEnrollment(row) {
-    const student = students.find((item) => item.admission_number.toLowerCase() === row.admission_number.toLowerCase())
+    const matchParams = new URLSearchParams({ page: '1', per_page: '100', search: row.admission_number, sort: 'admission_number', direction: 'asc' })
+    const matchingRows = await readPage(await apiRequest(`/api/schools/${school.id}/students?${matchParams}`))
+    const student = matchingRows.data.find((item) => item.admission_number.toLowerCase() === row.admission_number.toLowerCase())
     if (!student || student.status !== 'active') throw new Error('Admission number does not match an active student in this school.')
     if (student.current_enrollment?.academic_year === academicYear && student.current_enrollment.status === 'active') {
       throw new Error('Student already has an active enrollment for this year. Use the normal move-class action to change it.')
@@ -264,7 +337,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ grade_id: grade.id, section_id: section.id, academic_year: academicYear }),
     }))
-    setStudents(await readData(await apiRequest(`/api/schools/${school.id}/students?academic_year=${encodeURIComponent(academicYear)}`)))
+    await refreshStudentPage()
   }
 
   async function enrollStudent(event, student) {
@@ -276,8 +349,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grade_id: Number(gradeId), section_id: Number(sectionId), academic_year: academicYear }),
       }))
-      const refreshed = await readData(await apiRequest(`/api/schools/${school.id}/students`))
-      setStudents(refreshed)
+      await refreshStudentPage()
       setActiveStudentId(null)
     } catch (enrollError) {
       setError(enrollError.message)
@@ -288,7 +360,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
     event.preventDefault(); setError('')
     try {
       await readData(await apiRequest(`/api/schools/${school.id}/students/${student.id}/withdraw`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_date: lifecycleDate, reason: lifecycleReason }) }))
-      setStudents(await readData(await apiRequest(`/api/schools/${school.id}/students`)))
+      await refreshStudentPage()
       setLifecycleStudentId(null); setLifecycleReason('')
     } catch (withdrawError) { setError(withdrawError.message) }
   }
@@ -297,7 +369,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
     event.preventDefault(); setError('')
     try {
       await readData(await apiRequest(`/api/schools/${school.id}/students/${student.id}/rejoin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grade_id: Number(gradeId), section_id: Number(sectionId), event_date: lifecycleDate, reason: lifecycleReason }) }))
-      setStudents(await readData(await apiRequest(`/api/schools/${school.id}/students`)))
+      await refreshStudentPage()
       setLifecycleStudentId(null); setLifecycleReason(''); setSectionId('')
     } catch (rejoinError) { setError(rejoinError.message) }
   }
@@ -318,7 +390,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
         method: 'POST',
         body: payload,
       }))
-      setStudents(await readData(await apiRequest(`/api/schools/${school.id}/students`)))
+      await refreshStudentPage()
       setEditingStudentId(null)
       setEditStudentForm(null)
       setEditPhotoFile(null)
@@ -429,7 +501,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
         <div className="academic-panel">
           <div className="academic-section-heading">
             <h4>Students</h4>
-            <span>{filteredStudents.length}</span>
+            <span>{studentMeta.total}</span>
           </div>
           {selectedStudentId ? <section className="student-profile-page" aria-label="Student profile">
             <button className="quiet-button student-back-button" type="button" onClick={onCloseStudent}>← Back to students</button>
@@ -450,14 +522,11 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
               {canManage && legacyFeeHistory.length ? <section className="student-fee-history"><h5>Imported legacy fee balances</h5><p className="muted-copy">Historical spreadsheet month totals, kept separate from invoices and receipts.</p><div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Month</th><th>Received</th><th>Balance</th></tr></thead><tbody>{legacyFeeHistory.map((item) => <tr key={item.billing_month}><td>{item.billing_month}</td><td>{item.received_amount ?? '—'}</td><td>{item.balance_amount ?? '—'}</td></tr>)}</tbody></table></div></section> : null}
             </> : null}
           </section> : <>
-          <DataTools title="Students" rows={students.map((student) => {
-            const enrollment = enrollmentForYear(student)
-            return { ...student, guardian_source_parent_id: student.guardian?.source_parent_id || '', ...Object.fromEntries(Object.entries(student.guardian || {}).map(([key, value]) => [`guardian_${key}`, value])), grade: enrollment?.grade?.title || '', section: enrollment?.section?.title || '', academic_year: enrollment?.academic_year || '', enrollment_history: student.enrollments.map((item) => `${item.academic_year}: ${item.grade.title} / ${item.section.title} (${item.status})`).join(' | ') }
-          })} fields={studentImportFields} exportFields={studentExportFields} canImport={canManage} onImport={importStudent} />
+          <DataTools title="Students" rows={students.map(exportStudentRow)} loadExportRows={async () => (await loadAllStudents()).map(exportStudentRow)} onImportComplete={refreshStudentPage} fields={studentImportFields} exportFields={studentExportFields} canImport={canManage} onImport={importStudent} />
           <span className="active-year-label">Active academic year <strong>{academicYear}</strong></span>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {loading ? <p className="muted-copy" role="status">Loading student roster…</p> : null}
-          {!loading && !attendanceOnly && !showStudentForm ? <div className="roster-toolbar"><label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search students" placeholder="Quick find by student, admission no., phone, grade or section" value={search} onChange={(event) => { setSearch(event.target.value); setStudentPage(1) }} /></label><span className="student-navigator-count">{filteredStudents.length} matches</span>{canManage ? <button className="primary-button small-button" type="button" onClick={() => setShowStudentForm(true)}>＋ Add student</button> : null}</div> : null}
+          {!loading && !attendanceOnly && !showStudentForm ? <div className="roster-toolbar"><label className="module-search"><span aria-hidden="true">⌕</span><input aria-label="Search students" placeholder="Quick find by student, admission no., phone, grade or section" value={search} onChange={(event) => setSearch(event.target.value)} /></label><span className="student-navigator-count">{studentMeta.total} matches</span>{canManage ? <button className="primary-button small-button" type="button" onClick={() => { setGuardianLookupSearch(''); setShowStudentForm(true) }}>＋ Add student</button> : null}</div> : null}
           {showStudentForm && canManage ? <form className="student-profile-form" onSubmit={createStudent}>
             <div className="student-form-heading"><div><p className="eyebrow">Registration &amp; admission</p><h4>Student admission</h4><p>{admissionSeed ? `Complete the admission started from inquiry for ${admissionSeed.first_name} ${admissionSeed.last_name}.` : 'Enter the student profile and family contact details.'}</p></div><button className="quiet-button" type="button" onClick={() => { setShowStudentForm(false); if (admissionSeed) onAdmissionCancel?.() }}>Cancel</button></div>
             <fieldset><legend>Student profile</legend><div className="student-form-grid">
@@ -467,7 +536,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
               <label>Student photo<input type="file" accept="image/*" onChange={(event) => setPhotoFile(event.target.files?.[0] || null)} /></label>
               <label>B-Form document<input type="file" accept=".pdf,image/*" onChange={(event) => setBFormFile(event.target.files?.[0] || null)} /></label>
             </div></fieldset>
-            <fieldset><legend>Parent / guardian</legend><div className="student-guardian-select-row"><label>Select a guardian<select value={studentForm.guardian_id} onChange={(event) => setStudentForm((current) => ({ ...current, guardian_id: event.target.value }))}><option value="">No guardian selected</option>{guardians.map((guardian) => <option key={guardian.id} value={guardian.id}>#{guardian.id} · {guardian.father_name} / {guardian.mother_name}{guardian.father_phone ? ` · ${guardian.father_phone}` : ''}</option>)}</select></label><button className="quiet-button" type="button" onClick={() => onNavigate?.('guardians')}>Manage guardians</button></div>{guardians.length === 0 ? <p className="muted-copy">Add a guardian first, then select them here.</p> : null}</fieldset>
+            <fieldset><legend>Parent / guardian</legend><div className="student-guardian-select-row"><label>Find a guardian<input aria-label="Search guardians for student" placeholder="Search parent name, ID, phone or CNIC" value={guardianLookupSearch} onChange={(event) => setGuardianLookupSearch(event.target.value)} /></label><label>Select a guardian<select value={studentForm.guardian_id} onChange={(event) => setStudentForm((current) => ({ ...current, guardian_id: event.target.value }))}><option value="">No guardian selected</option>{guardians.map((guardian) => <option key={guardian.id} value={guardian.id}>#{guardian.source_parent_id || guardian.id} · {guardian.father_name} / {guardian.mother_name}{guardian.father_phone ? ` · ${guardian.father_phone}` : ''}</option>)}</select></label><button className="quiet-button" type="button" onClick={() => onNavigate?.('guardians')}>Manage guardians</button></div>{guardians.length === 0 ? <p className="muted-copy">Add a guardian first, then select them here.</p> : null}</fieldset>
             <div className="student-form-actions"><button className="primary-button small-button" type="submit">Save student</button><button className="quiet-button" type="button" onClick={() => setShowStudentForm(false)}>Cancel</button></div>
           </form> : null}
           {!loading && visibleStudents.length ? (
@@ -485,6 +554,8 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                       <TableAction action="view" label="View profile" onClick={() => onOpenStudent?.(student)} />
                       {canManage ? <>
                       <TableAction action="edit" label={editingStudentId === student.id ? 'Cancel edit' : 'Edit student'} onClick={() => {
+                        setGuardianLookupSearch('')
+                        if (student.guardian) setGuardians((current) => current.some((guardian) => guardian.id === student.guardian.id) ? current : [student.guardian, ...current])
                         setEditStudentForm(studentEditValues(student))
                         setEditingStudentId(editingStudentId === student.id ? null : student.id)
                         setActiveStudentId(null)
@@ -515,7 +586,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                       <label>Student photo<input type="file" accept="image/*" onChange={(event) => setEditPhotoFile(event.target.files?.[0] || null)} />{student.photo_path ? <span className="student-file-remove"><input type="checkbox" checked={removeStudentPhoto} onChange={(event) => setRemoveStudentPhoto(event.target.checked)} /> Remove current photo</span> : null}</label>
                       <label>B-Form document<input type="file" accept=".pdf,image/*" onChange={(event) => setEditBFormFile(event.target.files?.[0] || null)} />{student.b_form_document_path ? <span className="student-file-remove"><input type="checkbox" checked={removeStudentBForm} onChange={(event) => setRemoveStudentBForm(event.target.checked)} /> Remove current document</span> : null}</label>
                     </div></fieldset>
-                    <fieldset><legend>Parent / guardian</legend><div className="student-guardian-select-row"><label>Select a guardian<select value={editStudentForm.guardian_id} onChange={(event) => setEditStudentForm((current) => ({ ...current, guardian_id: event.target.value }))}><option value="">No guardian selected</option>{guardians.map((guardian) => <option key={guardian.id} value={guardian.id}>#{guardian.id} · {guardian.father_name} / {guardian.mother_name}{guardian.father_phone ? ` · ${guardian.father_phone}` : ''}</option>)}</select></label></div><p className="muted-copy">Update guardian contact information in the Guardians module.</p></fieldset>
+                    <fieldset><legend>Parent / guardian</legend><div className="student-guardian-select-row"><label>Find a guardian<input aria-label="Search guardians for student" placeholder="Search parent name, ID, phone or CNIC" value={guardianLookupSearch} onChange={(event) => setGuardianLookupSearch(event.target.value)} /></label><label>Select a guardian<select value={editStudentForm.guardian_id} onChange={(event) => setEditStudentForm((current) => ({ ...current, guardian_id: event.target.value }))}><option value="">No guardian selected</option>{guardians.map((guardian) => <option key={guardian.id} value={guardian.id}>#{guardian.source_parent_id || guardian.id} · {guardian.father_name} / {guardian.mother_name}{guardian.father_phone ? ` · ${guardian.father_phone}` : ''}</option>)}</select></label></div><p className="muted-copy">Update guardian contact information in the Guardians module.</p></fieldset>
                     <div className="student-form-actions"><button className="primary-button small-button" type="submit">Save changes</button><button className="quiet-button" type="button" onClick={() => { setEditingStudentId(null); setEditStudentForm(null) }}>Cancel</button></div>
                   </form></td></tr> : null}
                   {detailStudentId === student.id ? <tr className="student-expanded-row"><td colSpan="4"><section className="student-detail-panel" aria-label={`Details for ${student.first_name} ${student.last_name}`}>
@@ -552,7 +623,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
               })}
             </tbody></table></div>
           ) : null}
-          {!loading && filteredStudents.length > 0 ? <footer className="student-pagination"><span className="student-pagination-count">Showing <strong>{(safeStudentPage - 1) * studentPageSize + 1}–{Math.min(safeStudentPage * studentPageSize, sortedStudents.length)}</strong> of <strong>{sortedStudents.length}</strong> students</span><label className="student-pagination-size">Rows per page<select aria-label="Students per page" value={studentPageSize} onChange={(event) => setStudentPageSize(Number(event.target.value))}><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label><nav aria-label="Student table pagination"><button type="button" aria-label="Previous page" disabled={safeStudentPage <= 1} onClick={() => setStudentPage(safeStudentPage - 1)}>‹</button>{pagerPages.map((page) => typeof page === 'string' ? <span className="student-pagination-ellipsis" key={page}>…</span> : <button type="button" key={page} className={safeStudentPage === page ? 'active' : ''} aria-label={`Page ${page}`} aria-current={safeStudentPage === page ? 'page' : undefined} onClick={() => setStudentPage(page)}>{page}</button>)}<button type="button" aria-label="Next page" disabled={safeStudentPage >= studentPageCount} onClick={() => setStudentPage(safeStudentPage + 1)}>›</button></nav></footer> : null}
+          {!loading && filteredStudents.length > 0 ? <TablePagination meta={studentMeta} page={safeStudentPage} perPage={studentPageSize} label="students" onPageChange={setStudentPage} onPerPageChange={setStudentPageSize} /> : null}
           {!loading && visibleStudents.length === 0 ? <p className="muted-copy">No students match this search. Add a student or import a student CSV to get started.</p> : null}
           {canTakeAttendance && (attendanceOnly || !standalone) ? (
             <>

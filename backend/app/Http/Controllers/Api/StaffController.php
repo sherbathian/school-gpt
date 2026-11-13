@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\School;
 use App\Models\Staff;
 use App\Models\StaffLeaveBalance;
+use App\Models\Designation;
+use App\Models\Department;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,9 +20,44 @@ class StaffController extends Controller
     public function index(Request $request, int $school): JsonResponse
     {
         $schoolRecord = $this->accessibleSchool($request, $school, 'view');
-        $staff = $schoolRecord->staff()->with(['designation:id,title', 'department:id,title'])->orderBy('last_name')->orderBy('first_name')->get();
+        $validated = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'], 'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'sort' => ['sometimes', 'string', 'in:first_name,last_name,staff_no,designation,department,status'],
+            'direction' => ['sometimes', 'string', 'in:asc,desc'],
+        ]);
+        $query = $schoolRecord->staff()->with(['designation:id,title', 'department:id,title']);
+        $term = trim((string) ($validated['search'] ?? ''));
+        if ($term !== '') {
+            $query->where(function ($builder) use ($term): void {
+                $builder->where('staff_no', 'like', "%{$term}%")
+                    ->orWhere('first_name', 'like', "%{$term}%")
+                    ->orWhere('last_name', 'like', "%{$term}%")
+                    ->orWhere('status', 'like', "%{$term}%")
+                    ->orWhereHas('designation', fn ($lookup) => $lookup->where('title', 'like', "%{$term}%"))
+                    ->orWhereHas('department', fn ($lookup) => $lookup->where('title', 'like', "%{$term}%"));
+            });
+        }
+        $sort = $validated['sort'] ?? 'last_name';
+        $direction = $validated['direction'] ?? 'asc';
+        $query->orderBy(match ($sort) {
+            'designation' => Designation::query()->select('title')->whereColumn('designations.id', 'staff.designation_id')->limit(1),
+            'department' => Department::query()->select('title')->whereColumn('departments.id', 'staff.department_id')->limit(1),
+            default => $sort,
+        }, $direction);
+        $query->orderBy('first_name')->orderBy('id');
+        $usePagination = $request->hasAny(['page', 'per_page', 'search', 'sort', 'direction']);
+        if (! $usePagination) {
+            $staff = $query->get();
 
-        return response()->json(['data' => $staff->map(fn (Staff $person) => $this->staffData($person, $request->user()->hasSchoolPermission($schoolRecord, 'staff.manage')))->values()]);
+            return response()->json(['data' => $staff->map(fn (Staff $person) => $this->staffData($person, $request->user()->hasSchoolPermission($schoolRecord, 'staff.manage')))->values()]);
+        }
+        $staff = $query->paginate($validated['per_page'] ?? 25)->appends($request->query());
+
+        return response()->json([
+            'data' => $staff->getCollection()->map(fn (Staff $person) => $this->staffData($person, $request->user()->hasSchoolPermission($schoolRecord, 'staff.manage')))->values(),
+            'meta' => ['current_page' => $staff->currentPage(), 'last_page' => $staff->lastPage(), 'per_page' => $staff->perPage(), 'total' => $staff->total(), 'from' => $staff->firstItem(), 'to' => $staff->lastItem()],
+        ]);
     }
 
     public function store(Request $request, int $school): JsonResponse

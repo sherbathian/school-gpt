@@ -942,3 +942,7 @@ footer { padding: 23px 0 30px; color: #95a098; font-size: 12px; }
 .inquiry-page-item i { color: #9aa3b5; font-style: normal; }
 @media (max-width: 760px) { .inquiry-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .student-lifecycle-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .student-lifecycle-form .lifecycle-reason { grid-column: 1 / -1; } }
 @media (max-width: 580px) { .inquiry-heading { align-items: flex-start; flex-direction: column; } .inquiry-form-grid { grid-template-columns: 1fr; } .inquiry-form-grid .inquiry-wide { grid-column: auto; } .inquiry-toolbar { align-items: stretch; flex-direction: column; } .student-lifecycle-form { grid-template-columns: 1fr; } .student-lifecycle-form .lifecycle-reason { grid-column: auto; } .student-lifecycle-form > div:first-child, .student-lifecycle-form .student-form-actions { grid-column: auto; } }
+.family-fee-receipt-table { min-width: 1500px; }
+.family-fee-receipts .expense-list-toolbar > .module-search { flex: 1 1 360px; }
+.family-fee-receipts .expense-list-toolbar > .data-tools { flex: 0 1 auto; }
+@media (max-width: 760px) { .family-fee-receipts .expense-list-toolbar > .module-search, .family-fee-receipts .expense-list-toolbar > .data-tools { flex-basis: 100%; } }

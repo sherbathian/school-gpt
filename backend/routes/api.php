@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\ExpenseController;
+use App\Http\Controllers\Api\FamilyFeeReceiptController;
 use App\Http\Controllers\Api\FeeDiscountController;
 use App\Http\Controllers\Api\FeeGroupController;
 use App\Http\Controllers\Api\FeeInvoiceController;
@@ -110,6 +111,8 @@ Route::middleware(['auth:sanctum', ResolveSchoolPermissionTeam::class, RequireSc
     Route::post('/schools/{school}/fee-invoices', [FeeInvoiceController::class, 'store']);
     Route::delete('/schools/{school}/fee-invoices/{feeInvoice}', [FeeInvoiceController::class, 'destroy']);
     Route::post('/schools/{school}/fee-invoices/{feeInvoice}/payments', [FeeInvoiceController::class, 'recordPayment']);
+    Route::get('/schools/{school}/family-fee-receipts', [FamilyFeeReceiptController::class, 'index']);
+    Route::post('/schools/{school}/family-fee-receipts', [FamilyFeeReceiptController::class, 'store']);
 });
 
 Route::get('/schools/{school}/students/{student}/media/{kind}', [StudentController::class, 'media'])

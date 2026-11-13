@@ -11,7 +11,12 @@ class Guardian extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['school_id', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'father_doc_path', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'mother_doc_path', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address', 'guardian_doc_path'];
+    protected $fillable = ['school_id', 'source_parent_id', 'source_data', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'father_doc_path', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'mother_doc_path', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address', 'guardian_doc_path'];
+
+    protected function casts(): array
+    {
+        return ['source_data' => 'array', 'is_guardian_other' => 'boolean'];
+    }
 
     public function school(): BelongsTo
     {
@@ -21,5 +26,10 @@ class Guardian extends Model
     public function students(): HasMany
     {
         return $this->hasMany(Student::class);
+    }
+
+    public function familyFeeReceipts(): HasMany
+    {
+        return $this->hasMany(FamilyFeeReceipt::class);
     }
 }

@@ -9,8 +9,8 @@ const textFields = [
   ['guardian_name', 'Guardian name', 'text'], ['guardian_relation', 'Guardian relation', 'text'], ['guardian_email', 'Guardian email', 'email'], ['guardian_phone', 'Guardian phone', 'tel'], ['guardian_occupation', 'Guardian occupation', 'text'], ['guardian_cnic', 'Guardian CNIC', 'text'], ['guardian_address', 'Guardian address', 'textarea'],
 ]
 const guardianKeys = textFields.map(([key]) => key)
-const importFields = textFields.map(([key]) => ({ key, label: key, required: ['father_name', 'father_cnic', 'mother_name', 'mother_cnic'].includes(key) }))
-const exportFields = ['id', ...guardianKeys, 'is_guardian_other', 'students_count'].map((key) => ({ key, label: key }))
+const importFields = [{ key: 'source_parent_id', label: 'source_parent_id' }, { key: 'source_data', label: 'source_data' }, ...textFields.map(([key]) => ({ key, label: key })), { key: 'is_guardian_other', label: 'is_guardian_other' }]
+const exportFields = ['id', 'source_parent_id', ...guardianKeys, 'is_guardian_other', 'students_count'].map((key) => ({ key, label: key }))
 
 function emptyGuardian() {
   return Object.fromEntries([...guardianKeys, 'is_guardian_other'].map((key) => [key, key === 'is_guardian_other' ? false : '']))
@@ -107,7 +107,10 @@ export default function GuardianManagement({ school, canManage, onNavigate, onOp
   }
 
   async function importGuardian(row) {
-    const payload = Object.fromEntries([...guardianKeys, 'is_guardian_other'].filter((key) => row[key] !== undefined).map((key) => [key, key === 'is_guardian_other' ? ['1', 'true', 'yes'].includes(String(row[key]).toLowerCase()) : row[key]]))
+    const payload = Object.fromEntries(['source_parent_id', ...guardianKeys, 'is_guardian_other'].filter((key) => row[key] !== undefined && row[key] !== '').map((key) => [key, key === 'is_guardian_other' ? ['1', 'true', 'yes'].includes(String(row[key]).toLowerCase()) : row[key]]))
+    if (row.source_data) {
+      try { payload.source_data = JSON.parse(row.source_data) } catch { throw new Error('source_data must contain valid JSON.') }
+    }
     const created = await readData(await apiRequest(`/api/schools/${school.id}/guardians`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }))
     setGuardians((current) => [...current, created].sort((left, right) => left.father_name.localeCompare(right.father_name)))
   }

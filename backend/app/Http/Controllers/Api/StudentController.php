@@ -50,6 +50,14 @@ class StudentController extends Controller
             'guardian_id' => ['nullable', 'integer', Rule::exists('guardians', 'id')->where(fn (Builder $query) => $query->where('school_id', $schoolRecord->id))],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
+            'full_name' => ['nullable', 'string', 'max:180'],
+            'admission_type' => ['nullable', 'string', 'max:40'], 'previous_admission_number' => ['nullable', 'string', 'max:50'],
+            'admitted_class' => ['nullable', 'string', 'max:80'], 'current_class_label' => ['nullable', 'string', 'max:80'],
+            'caste_or_tribe' => ['nullable', 'string', 'max:100'], 'fee_rate' => ['nullable', 'numeric', 'min:0'],
+            'fee_amount' => ['nullable', 'numeric', 'min:0'], 'fee_waiver' => ['nullable', 'string', 'max:80'],
+            'arrears_due' => ['nullable', 'numeric', 'min:0'], 'withdrawn_from_class' => ['nullable', 'string', 'max:80'],
+            'source_marks_obtained' => ['nullable', 'numeric', 'min:0'], 'source_marks_percentage' => ['nullable', 'numeric', 'between:0,100'],
+            'source_data' => ['nullable', 'array'], 'source_guardian_data' => ['nullable', 'array'],
             'gender' => ['nullable', Rule::in(['male', 'female'])], 'religion' => ['nullable', 'string', 'max:100'],
             'email' => ['nullable', 'email', 'max:255'], 'phone' => ['nullable', 'string', 'max:50'], 'address' => ['nullable', 'string'],
             'birth_date' => ['nullable', 'date'], 'admission_date' => ['nullable', 'date'], 'leave_date' => ['nullable', 'date'],
@@ -72,6 +80,7 @@ class StudentController extends Controller
         if ($bFormDocument) {
             $validated['b_form_document_path'] = $bFormDocument->store("students/{$schoolRecord->id}/documents", 'local');
         }
+        $validated['full_name'] = $validated['full_name'] ?? trim($validated['first_name'].' '.$validated['last_name']);
         if ($guardian && collect($guardian)->filter()->isNotEmpty()) {
             if (! ($guardian['is_guardian_other'] ?? false) && empty($guardian['father_phone']) && empty($guardian['mother_phone'])) {
                 throw ValidationException::withMessages(['guardian.father_phone' => ['Enter a father, mother, or other guardian phone number.']]);
@@ -112,6 +121,9 @@ class StudentController extends Controller
         }
         if (Gate::allows('manage', $schoolRecord)) {
             $data['fee_history'] = $this->feeHistory($studentRecord);
+            $data['legacy_fee_history'] = $studentRecord->legacyFeeSnapshots()->orderByDesc('billing_month')->get()
+                ->map(fn ($snapshot): array => $snapshot->only(['billing_month', 'balance_amount', 'received_amount', 'balance_source_label', 'received_source_label']))
+                ->values();
         }
 
         return response()->json(['data' => $data]);
@@ -143,6 +155,14 @@ class StudentController extends Controller
             'admission_number' => ['sometimes', 'required', 'string', 'max:50', Rule::unique('students', 'admission_number')->where(fn (Builder $query) => $query->where('school_id', $schoolRecord->id))->ignore($studentRecord->id)],
             'first_name' => ['sometimes', 'required', 'string', 'max:100'],
             'last_name' => ['sometimes', 'required', 'string', 'max:100'],
+            'full_name' => ['sometimes', 'nullable', 'string', 'max:180'],
+            'admission_type' => ['sometimes', 'nullable', 'string', 'max:40'], 'previous_admission_number' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'admitted_class' => ['sometimes', 'nullable', 'string', 'max:80'], 'current_class_label' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'caste_or_tribe' => ['sometimes', 'nullable', 'string', 'max:100'], 'fee_rate' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'fee_amount' => ['sometimes', 'nullable', 'numeric', 'min:0'], 'fee_waiver' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'arrears_due' => ['sometimes', 'nullable', 'numeric', 'min:0'], 'withdrawn_from_class' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'source_marks_obtained' => ['sometimes', 'nullable', 'numeric', 'min:0'], 'source_marks_percentage' => ['sometimes', 'nullable', 'numeric', 'between:0,100'],
+            'source_data' => ['sometimes', 'nullable', 'array'], 'source_guardian_data' => ['sometimes', 'nullable', 'array'],
             'status' => ['sometimes', Rule::in(['pending', 'active', 'leave', 'alumni', 'inactive'])],
             'gender' => ['sometimes', 'nullable', Rule::in(['male', 'female'])], 'religion' => ['sometimes', 'nullable', 'string', 'max:100'],
             'email' => ['sometimes', 'nullable', 'email', 'max:255'], 'phone' => ['sometimes', 'nullable', 'string', 'max:50'], 'address' => ['sometimes', 'nullable', 'string'],
@@ -162,6 +182,9 @@ class StudentController extends Controller
         $removeBFormDocument = (bool) ($validated['remove_b_form_document'] ?? false);
         unset($validated['photo'], $validated['b_form_document']);
         unset($validated['remove_photo'], $validated['remove_b_form_document']);
+        if (! array_key_exists('full_name', $validated) && (array_key_exists('first_name', $validated) || array_key_exists('last_name', $validated))) {
+            $validated['full_name'] = trim(($validated['first_name'] ?? $studentRecord->first_name).' '.($validated['last_name'] ?? $studentRecord->last_name));
+        }
         if ($photo || $removePhoto) {
             if ($studentRecord->photo_path) {
                 Storage::disk('local')->delete($studentRecord->photo_path);
@@ -328,8 +351,13 @@ class StudentController extends Controller
             'id' => $student->id,
             'guardian_id' => $student->guardian_id,
             'admission_number' => $student->admission_number,
+            'admission_type' => $student->admission_type,
+            'previous_admission_number' => $student->previous_admission_number,
+            'admitted_class' => $student->admitted_class,
+            'current_class_label' => $student->current_class_label,
             'first_name' => $student->first_name,
             'last_name' => $student->last_name,
+            'full_name' => $student->full_name ?: trim($student->first_name.' '.$student->last_name),
             'status' => $student->status,
             'gender' => $student->gender,
             'religion' => $student->religion,
@@ -344,7 +372,15 @@ class StudentController extends Controller
             'leave_date' => $student->leave_date?->toDateString(),
             'previous_school_details' => $student->previous_school_details,
             'note' => $student->note,
-            'guardian' => $student->guardian?->only(['id', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address']),
+            'caste_or_tribe' => $student->caste_or_tribe,
+            'fee_rate' => $student->fee_rate,
+            'fee_amount' => $student->fee_amount,
+            'fee_waiver' => $student->fee_waiver,
+            'arrears_due' => $student->arrears_due,
+            'withdrawn_from_class' => $student->withdrawn_from_class,
+            'source_marks_obtained' => $student->source_marks_obtained,
+            'source_marks_percentage' => $student->source_marks_percentage,
+            'guardian' => $student->guardian?->only(['id', 'source_parent_id', 'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'mother_name', 'mother_phone', 'mother_occupation', 'mother_cnic', 'is_guardian_other', 'guardian_name', 'guardian_relation', 'guardian_email', 'guardian_phone', 'guardian_occupation', 'guardian_cnic', 'guardian_address']),
             'current_enrollment' => $currentEnrollment ? $this->enrollmentData($currentEnrollment) : null,
             'enrollments' => $enrollments->map(fn (Enrollment $enrollment) => $this->enrollmentData($enrollment))->all(),
             'lifecycle_events' => $student->lifecycleEvents->sortByDesc('event_date')->values()->map(fn ($event): array => ['id' => $event->id, 'event_type' => $event->event_type, 'event_date' => $event->event_date->toDateString(), 'reason' => $event->reason])->all(),

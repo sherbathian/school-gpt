@@ -23,12 +23,22 @@ function todayDate() {
 }
 
 const studentProfileFields = [
-  ['admission_number', 'Admission number', 'text'], ['first_name', 'First name', 'text'], ['last_name', 'Last name', 'text'],
+  ['admission_number', 'Admission number', 'text'], ['full_name', 'Full name', 'text'], ['first_name', 'First name', 'text'], ['last_name', 'Last name', 'text'],
+  ['admission_type', 'Admission type', 'text'], ['previous_admission_number', 'Previous admission number', 'text'],
+  ['admitted_class', 'Admitted class', 'text'], ['current_class_label', 'Source current class', 'text'],
   ['gender', 'Gender', 'select'], ['status', 'Status', 'status'], ['religion', 'Religion', 'text'], ['email', 'Email', 'email'],
   ['phone', 'Phone', 'tel'], ['birth_date', 'Birth date', 'date'], ['admission_date', 'Admission date', 'date'],
   ['leave_date', 'Leave date', 'date'], ['b_form_number', 'B-Form number', 'text'], ['address', 'Address', 'textarea'],
+  ['caste_or_tribe', 'Caste or tribe', 'text'],
+  ['fee_rate', 'Fee rate', 'number'], ['fee_amount', 'Recorded fee amount', 'number'], ['fee_waiver', 'Fee waiver / free status', 'text'],
+  ['arrears_due', 'Recorded arrears due', 'number'], ['withdrawn_from_class', 'Withdrawn from class', 'text'],
+  ['source_marks_obtained', 'Source marks obtained', 'number'], ['source_marks_percentage', 'Source marks percentage', 'number'],
   ['previous_school_details', 'Previous school details', 'textarea'], ['note', 'Notes', 'textarea'],
 ]
+
+function studentName(student) {
+  return student.full_name || [student.last_name, student.first_name].filter(Boolean).join(', ')
+}
 
 const guardianFields = [
   'father_name', 'father_phone', 'father_occupation', 'father_cnic', 'mother_name', 'mother_phone', 'mother_occupation',
@@ -38,13 +48,14 @@ const guardianFields = [
 
 const studentImportFields = [
   ...studentProfileFields.map(([key, label]) => ({ key, label: key, required: ['admission_number', 'first_name', 'last_name'].includes(key) })),
-  { key: 'guardian_id', label: 'guardian_id' },
+  { key: 'guardian_id', label: 'guardian_id' }, { key: 'guardian_source_parent_id', label: 'guardian_source_parent_id' },
+  { key: 'source_data', label: 'source_data' }, { key: 'source_guardian_data', label: 'source_guardian_data' },
   ...[...guardianFields, 'is_guardian_other'].map((key) => ({ key: `guardian_${key}`, label: `guardian_${key}` })),
 ]
 
 const studentExportFields = [
-  ...studentProfileFields.map(([key]) => key), 'guardian_id', ...guardianFields.map((key) => `guardian_${key}`),
-  'guardian_is_guardian_other', 'grade', 'section', 'academic_year', 'enrollment_history',
+  ...studentProfileFields.map(([key]) => key), 'guardian_id', 'guardian_source_parent_id', ...guardianFields.map((key) => `guardian_${key}`),
+  'guardian_is_guardian_other', 'grade', 'section', 'academic_year', 'enrollment_history', 'source_data', 'source_guardian_data',
 ].map((key) => ({ key, label: key }))
 
 function studentEditValues(student) {
@@ -68,7 +79,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const [admissionNumber, setAdmissionNumber] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [studentForm, setStudentForm] = useState({ admission_number: '', first_name: '', last_name: '', gender: 'male', religion: '', email: '', phone: '', address: '', birth_date: '', b_form_number: '', admission_date: todayDate(), previous_school_details: '', note: '', guardian_id: '' })
+  const [studentForm, setStudentForm] = useState({ admission_number: '', full_name: '', first_name: '', last_name: '', admission_type: '', previous_admission_number: '', admitted_class: '', current_class_label: '', gender: 'male', religion: '', email: '', phone: '', address: '', birth_date: '', b_form_number: '', admission_date: todayDate(), leave_date: '', caste_or_tribe: '', fee_rate: '', fee_amount: '', fee_waiver: '', arrears_due: '', withdrawn_from_class: '', source_marks_obtained: '', source_marks_percentage: '', previous_school_details: '', note: '', guardian_id: '' })
   const [showStudentForm, setShowStudentForm] = useState(false)
   const [photoFile, setPhotoFile] = useState(null)
   const [bFormFile, setBFormFile] = useState(null)
@@ -90,6 +101,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   const [detailStudentId, setDetailStudentId] = useState(null)
   const [detailStudent, setDetailStudent] = useState(null)
   const [detailFees, setDetailFees] = useState([])
+  const [legacyFeeHistory, setLegacyFeeHistory] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [gradeId, setGradeId] = useState('')
   const [sectionId, setSectionId] = useState('')
@@ -144,6 +156,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
     if (!selectedStudentId) {
       setDetailStudent(null)
       setDetailFees([])
+      setLegacyFeeHistory([])
       return undefined
     }
     const controller = new AbortController()
@@ -154,6 +167,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
       .then((detail) => {
         setDetailStudent(detail)
         setDetailFees(detail.fee_history || [])
+        setLegacyFeeHistory(detail.legacy_fee_history || [])
       })
       .catch((detailError) => { if (!controller.signal.aborted) setError(detailError.message) })
       .finally(() => { if (!controller.signal.aborted) setDetailLoading(false) })
@@ -221,10 +235,18 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
   }
 
   async function importStudent(row) {
-    const guardian = Object.fromEntries(Object.entries(row).filter(([key]) => key.startsWith('guardian_') && key !== 'guardian_id').map(([key, value]) => [key.slice(9), value]))
+    const guardianParentId = String(row.guardian_source_parent_id || '').trim()
+    const linkedGuardian = guardianParentId ? guardians.find((item) => String(item.source_parent_id) === guardianParentId) : null
+    const guardian = Object.fromEntries(Object.entries(row).filter(([key]) => key.startsWith('guardian_') && !['guardian_id', 'guardian_source_parent_id'].includes(key)).map(([key, value]) => [key.slice(9), value]))
+    const parseSource = (value) => {
+      if (!value) return undefined
+      try { return typeof value === 'string' ? JSON.parse(value) : value } catch { throw new Error('Source data fields must contain valid JSON.') }
+    }
+    const payload = { ...row, guardian_id: linkedGuardian?.id || row.guardian_id || '', source_data: parseSource(row.source_data), source_guardian_data: parseSource(row.source_guardian_data), guardian: !linkedGuardian && Object.values(guardian).some(Boolean) ? guardian : undefined }
+    delete payload.guardian_source_parent_id
     const student = await readData(await apiRequest(`/api/schools/${school.id}/students`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...row, guardian: Object.values(guardian).some(Boolean) ? guardian : undefined }),
+      body: JSON.stringify(payload),
     }))
     setStudents((current) => [...current, student].sort((left, right) => `${left.last_name} ${left.first_name}`.localeCompare(`${right.last_name} ${right.first_name}`)))
   }
@@ -318,6 +340,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
     setDetailStudentId(student.id)
     setDetailStudent(null)
     setDetailFees([])
+    setLegacyFeeHistory([])
     setDetailLoading(true)
     setError('')
     try {
@@ -325,6 +348,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
       const detail = await readData(detailResponse)
       setDetailStudent(detail)
       setDetailFees(detail.fee_history || [])
+      setLegacyFeeHistory(detail.legacy_fee_history || [])
     } catch (detailError) {
       setError(detailError.message)
     } finally {
@@ -414,7 +438,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
             {!detailLoading && detailStudent ? <>
               <header className="student-profile-hero">
                 {detailStudent.photo_url ? <img className="student-profile-photo" src={detailStudent.photo_url} alt={`${detailStudent.first_name} ${detailStudent.last_name}`} /> : <span className="student-profile-photo student-profile-initials">{detailStudent.first_name?.[0]}{detailStudent.last_name?.[0]}</span>}
-                <div><p className="eyebrow">Student profile</p><h3>{detailStudent.last_name}, {detailStudent.first_name}</h3><p>{detailStudent.admission_number} <span>·</span> {fieldLabel(detailStudent.status)}</p></div>
+                <div><p className="eyebrow">Student profile</p><h3>{studentName(detailStudent)}</h3><p>{detailStudent.admission_number} <span>·</span> {fieldLabel(detailStudent.status)}</p></div>
                 <div className="student-profile-actions"><span className="active-year-label">Current session <strong>{academicYear}</strong></span></div>
               </header>
               <div className="student-detail-grid"><section className="student-info-card"><div className="student-card-heading"><span className="student-card-icon" aria-hidden="true">▤</span><div><h5>Student information</h5><p>Admission, identity and contact details</p></div></div><dl>{studentProfileFields.map(([key, label]) => <div className={['email', 'address', 'previous_school_details', 'note'].includes(key) ? 'student-detail-wide' : ''} key={key}><dt>{label}</dt><dd>{key === 'email' && detailStudent[key] ? <a href={`mailto:${detailStudent[key]}`}>{detailStudent[key]}</a> : detailStudent[key] || '—'}</dd></div>)}</dl></section>
@@ -423,11 +447,12 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                 <section className="student-enrollment-history"><h5>Enrollment history</h5>{detailStudent.enrollments.length ? <div className="student-history-list">{detailStudent.enrollments.map((enrollment) => <div key={enrollment.id}><strong>{enrollment.grade.title} · {enrollment.section.title}</strong><span>{enrollment.academic_year} · {fieldLabel(enrollment.status)}</span></div>)}</div> : <p className="muted-copy">No enrollment history.</p>}</section>
                 <section className="student-lifecycle-history"><h5>Withdrawals &amp; rejoinings</h5>{detailStudent.lifecycle_events?.length ? <div className="student-history-list">{detailStudent.lifecycle_events.map((item) => <div key={item.id}><strong>{fieldLabel(item.event_type)} · {item.event_date}</strong><span>{item.reason || 'No notes recorded'}</span></div>)}</div> : <p className="muted-copy">No withdrawal or rejoining history.</p>}</section></div>
               {canManage ? <section className="student-fee-history"><h5>Fee history</h5>{detailFees.length ? <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Fee item</th><th>Academic year / month</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>{detailFees.map((fee) => <tr key={`${fee.kind}-${fee.id}`}><td>{fee.fee_type}<small>{fee.kind === 'monthly' ? 'Monthly charge' : 'Invoice'}</small></td><td>{fee.billing_month || fee.academic_year}</td><td>{fee.due_date || '—'}</td><td>{fee.amount}</td><td>{fee.amount_paid || '0.00'}</td><td>{fee.balance}</td><td><span className={`fee-status fee-status-${fee.status}`}>{fieldLabel(fee.status)}</span></td></tr>)}</tbody></table></div> : <p className="muted-copy">No fee records are linked to this student yet.</p>}</section> : null}
+              {canManage && legacyFeeHistory.length ? <section className="student-fee-history"><h5>Imported legacy fee balances</h5><p className="muted-copy">Historical spreadsheet month totals, kept separate from invoices and receipts.</p><div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Month</th><th>Received</th><th>Balance</th></tr></thead><tbody>{legacyFeeHistory.map((item) => <tr key={item.billing_month}><td>{item.billing_month}</td><td>{item.received_amount ?? '—'}</td><td>{item.balance_amount ?? '—'}</td></tr>)}</tbody></table></div></section> : null}
             </> : null}
           </section> : <>
           <DataTools title="Students" rows={students.map((student) => {
             const enrollment = enrollmentForYear(student)
-            return { ...student, ...Object.fromEntries(Object.entries(student.guardian || {}).map(([key, value]) => [`guardian_${key}`, value])), grade: enrollment?.grade?.title || '', section: enrollment?.section?.title || '', academic_year: enrollment?.academic_year || '', enrollment_history: student.enrollments.map((item) => `${item.academic_year}: ${item.grade.title} / ${item.section.title} (${item.status})`).join(' | ') }
+            return { ...student, guardian_source_parent_id: student.guardian?.source_parent_id || '', ...Object.fromEntries(Object.entries(student.guardian || {}).map(([key, value]) => [`guardian_${key}`, value])), grade: enrollment?.grade?.title || '', section: enrollment?.section?.title || '', academic_year: enrollment?.academic_year || '', enrollment_history: student.enrollments.map((item) => `${item.academic_year}: ${item.grade.title} / ${item.section.title} (${item.status})`).join(' | ') }
           })} fields={studentImportFields} exportFields={studentExportFields} canImport={canManage} onImport={importStudent} />
           <span className="active-year-label">Active academic year <strong>{academicYear}</strong></span>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
@@ -437,7 +462,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
             <div className="student-form-heading"><div><p className="eyebrow">Registration &amp; admission</p><h4>Student admission</h4><p>{admissionSeed ? `Complete the admission started from inquiry for ${admissionSeed.first_name} ${admissionSeed.last_name}.` : 'Enter the student profile and family contact details.'}</p></div><button className="quiet-button" type="button" onClick={() => { setShowStudentForm(false); if (admissionSeed) onAdmissionCancel?.() }}>Cancel</button></div>
             <fieldset><legend>Student profile</legend><div className="student-form-grid">
               {[
-                ['admission_number', 'Admission number', 'text', true], ['first_name', 'First name', 'text', true], ['last_name', 'Last name', 'text', true], ['gender', 'Gender', 'select', true], ['birth_date', 'Birth date', 'date', false], ['admission_date', 'Admission date', 'date', false], ['leave_date', 'Leave date', 'date', false], ['status', 'Admission status', 'status', false], ['religion', 'Religion', 'text', false], ['email', 'Email', 'email', false], ['phone', 'Phone', 'tel', false], ['b_form_number', 'B-Form number', 'text', false], ['address', 'Address', 'textarea', false], ['previous_school_details', 'Previous school details', 'textarea', false], ['note', 'Notes', 'textarea', false],
+                ['admission_number', 'Admission number', 'text', true], ['full_name', 'Full name', 'text', false], ['first_name', 'First name', 'text', true], ['last_name', 'Last name', 'text', true], ['admission_type', 'Admission type', 'text', false], ['previous_admission_number', 'Previous admission number', 'text', false], ['admitted_class', 'Admitted class', 'text', false], ['current_class_label', 'Source current class', 'text', false], ['gender', 'Gender', 'select', true], ['birth_date', 'Birth date', 'date', false], ['admission_date', 'Admission date', 'date', false], ['leave_date', 'Leave date', 'date', false], ['status', 'Admission status', 'status', false], ['religion', 'Religion', 'text', false], ['email', 'Email', 'email', false], ['phone', 'Phone', 'tel', false], ['b_form_number', 'B-Form number', 'text', false], ['caste_or_tribe', 'Caste or tribe', 'text', false], ['fee_rate', 'Fee rate', 'number', false], ['fee_amount', 'Recorded fee amount', 'number', false], ['fee_waiver', 'Fee waiver / free status', 'text', false], ['arrears_due', 'Recorded arrears due', 'number', false], ['withdrawn_from_class', 'Withdrawn from class', 'text', false], ['source_marks_obtained', 'Source marks obtained', 'number', false], ['source_marks_percentage', 'Source marks percentage', 'number', false], ['address', 'Address', 'textarea', false], ['previous_school_details', 'Previous school details', 'textarea', false], ['note', 'Notes', 'textarea', false],
               ].map(([key, label, type, required]) => <label key={key}>{label}{type === 'select' ? <select value={studentForm[key]} onChange={(event) => setStudentForm({ ...studentForm, [key]: event.target.value })}><option value="male">Male</option><option value="female">Female</option></select> : type === 'status' ? <select value={studentForm[key] || 'active'} onChange={(event) => setStudentForm({ ...studentForm, [key]: event.target.value })}><option value="pending">Pending</option><option value="active">Active</option><option value="leave">Leave</option><option value="alumni">Alumni</option></select> : type === 'textarea' ? <textarea rows="2" value={studentForm[key]} onChange={(event) => setStudentForm({ ...studentForm, [key]: event.target.value })} /> : <input type={type} value={studentForm[key]} onChange={(event) => setStudentForm({ ...studentForm, [key]: event.target.value })} required={required} />}</label>)}
               <label>Student photo<input type="file" accept="image/*" onChange={(event) => setPhotoFile(event.target.files?.[0] || null)} /></label>
               <label>B-Form document<input type="file" accept=".pdf,image/*" onChange={(event) => setBFormFile(event.target.files?.[0] || null)} /></label>
@@ -453,7 +478,7 @@ export default function StudentRoster({ school, canManage, canTakeAttendance, ex
                 return (
                 <Fragment key={student.id}>
                   <tr className="student-row">
-                    <td><strong>{student.first_name} {student.last_name}</strong><small>{student.admission_number} · {student.status}</small></td>
+                    <td><strong>{studentName(student)}</strong><small>{student.admission_number} · {student.status}</small></td>
                     <td>{student.phone || '—'}<small>{student.email || 'No email on file'}</small></td>
                     <td>{displayedEnrollment ? `${displayedEnrollment.grade.title} · ${displayedEnrollment.section.title}` : student.status === 'active' ? 'Not enrolled this year' : 'Archived'}<small>{displayedEnrollment?.academic_year || ''}{displayedEnrollment ? ` · ${displayedEnrollment.status}` : ''}</small></td>
                     <td><div className="academic-actions">

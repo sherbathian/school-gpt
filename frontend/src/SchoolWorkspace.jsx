@@ -3,6 +3,7 @@ import { apiRequest } from './api.js'
 import AcademicStructure from './AcademicStructure.jsx'
 import StudentRoster from './StudentRoster.jsx'
 import FeeManagement from './FeeManagement.jsx'
+import FamilyFeeReceipts from './FamilyFeeReceipts.jsx'
 import ExpenseManagement from './ExpenseManagement.jsx'
 import FeeSetup from './FeeSetup.jsx'
 import SchoolSessions from './SchoolSessions.jsx'
@@ -238,6 +239,7 @@ function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange
       {activeModule === 'attendance' ? <StudentRoster school={school} canManage={canTakeAttendance} canTakeAttendance={canTakeAttendance} expanded attendanceOnly standalone /> : null}
       {['fees-catalog', 'fees-discounts', 'fees-groups', 'fees-masters'].includes(activeModule) && hasPermission('fees.view') ? <FeeSetup school={school} activeSection={activeModule.replace('fees-', '') === 'catalog' ? 'fee-types' : activeModule.replace('fees-', '')} canManage={canManageFees} /> : null}
       {['fee-items', 'invoices'].includes(activeModule) && hasPermission('fees.view') ? <FeeManagement school={school} expanded standalone activeView={activeModule} canManage={canManageFees} /> : null}
+      {activeModule === 'family-fee-receipts' && hasPermission('fees.view') ? <FamilyFeeReceipts school={school} canManage={canManageFees} /> : null}
       {activeModule.startsWith('expense-') && hasPermission('expenses.view') ? <ExpenseManagement school={school} activeView={activeModule} canManage={canManageExpenses} /> : null}
       {activeModule === 'roles' ? <SchoolRoles school={school} /> : null}
 
@@ -392,7 +394,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
     { title: 'STUDENTS', items: [['students', '♧', 'Students'], ['student-inquiries', '▣', 'Inquiries & admissions'], ['attendance', '✓', 'Attendance']] },
     { title: 'GUARDIANS', items: [['guardians', '♙', 'Guardians']] },
     { title: 'ACADEMICS', items: [['academic-sections', '▤', 'Sections'], ['academic-grades', '▤', 'Grades'], ['academic-subjects', '◈', 'Subjects'], ['academic-years', '◷', 'Academic years']] },
-    { title: 'FINANCE', items: [['fees-catalog', '＄', 'Fee catalog'], ['fees-discounts', '%', 'Discounts'], ['fees-groups', '▣', 'Fee groups'], ['fees-masters', '▤', 'Fee masters'], ['fee-items', '＋', 'Invoice fee items'], ['invoices', '▧', 'Invoices & payments'], ['expense-heads', '▤', 'Expense heads'], ['expense-add', '＋', 'Add expense'], ['expense-search', '⌕', 'Search expenses']] },
+    { title: 'FINANCE', items: [['fees-catalog', '＄', 'Fee catalog'], ['fees-discounts', '%', 'Discounts'], ['fees-groups', '▣', 'Fee groups'], ['fees-masters', '▤', 'Fee masters'], ['fee-items', '＋', 'Invoice fee items'], ['invoices', '▧', 'Invoices & payments'], ['family-fee-receipts', '▤', 'Family fee receipts'], ['expense-heads', '▤', 'Expense heads'], ['expense-add', '＋', 'Add expense'], ['expense-search', '⌕', 'Search expenses']] },
     { title: 'PEOPLE', items: [['staff-directory', '♙', 'Staff'], ['staff-create', '＋', 'Add staff'], ['staff-designations', '◇', 'Designations'], ['staff-departments', '▥', 'Departments'], ['staff-leave-types', '◷', 'Leave types']] },
     { title: 'ACCESS', items: [['roles', '♢', 'Roles & permissions'], ...(user.is_super_admin ? [['users', '♟', 'User accounts']] : [])] },
   ].map((group) => ({
@@ -403,7 +405,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
       if (key === 'attendance') return can('attendance.view') || can('attendance.manage')
       if (key === 'guardians') return can('guardians.view') || can('guardians.manage')
       if (key.startsWith('academic-')) return can('academics.view') || can('academics.manage')
-      if (key.startsWith('fees-') || key === 'fee-items' || key === 'invoices') return can('fees.view') || can('fees.manage')
+      if (key.startsWith('fees-') || key === 'fee-items' || key === 'invoices' || key === 'family-fee-receipts') return can('fees.view') || can('fees.manage')
       if (key.startsWith('expense-')) return can('expenses.view') || can('expenses.manage')
       if (key === 'staff-directory') return can('staff.view') || can('staff.manage')
       if (['staff-create', 'staff-designations', 'staff-departments', 'staff-leave-types'].includes(key)) return can('staff.manage')

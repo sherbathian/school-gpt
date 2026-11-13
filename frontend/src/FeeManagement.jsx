@@ -21,7 +21,7 @@ function formatAmount(amount) {
   return Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export default function FeeManagement({ school, expanded = false, standalone = false, activeView = 'all' }) {
+export default function FeeManagement({ school, expanded = false, standalone = false, activeView = 'all', canManage = false }) {
   const [open, setOpen] = useState(expanded)
   const [academicYear] = useState(school.active_session?.academic_year || currentAcademicYear())
   const [feeTypes, setFeeTypes] = useState([])
@@ -260,20 +260,20 @@ export default function FeeManagement({ school, expanded = false, standalone = f
             <>
               {(activeView === 'all' || activeView === 'fee-items') ? <section aria-labelledby={`fee-items-heading-${school.id}`}>
                 <div className="academic-section-heading"><h4 id={`fee-items-heading-${school.id}`}>Invoice fee items</h4><span>{feeTypes.length}</span></div>
-                <DataTools title="Invoice fee items" rows={feeTypes} fields={[{ key: 'title', label: 'title', required: true }, { key: 'amount', label: 'amount', required: true }, { key: 'academic_year', label: 'academic_year' }, { key: 'status', label: 'status' }]} canImport onImport={importFeeType} />
-                <form className="fee-item-form" onSubmit={createFeeType}>
+                <DataTools title="Invoice fee items" rows={feeTypes} fields={[{ key: 'title', label: 'title', required: true }, { key: 'amount', label: 'amount', required: true }, { key: 'academic_year', label: 'academic_year' }, { key: 'status', label: 'status' }]} canImport={canManage} onImport={importFeeType} />
+                {canManage ? <form className="fee-item-form" onSubmit={createFeeType}>
                   <label htmlFor={`fee-title-${school.id}`}>Fee item name</label>
                   <input id={`fee-title-${school.id}`} value={title} onChange={(event) => setTitle(event.target.value)} required />
                   <label htmlFor={`fee-amount-${school.id}`}>Amount</label>
                   <input id={`fee-amount-${school.id}`} type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required />
                   <button className="primary-button small-button" type="submit" disabled={busyKey === 'fee-type'}>Add fee item</button>
-                </form>
+                </form> : null}
                 <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search invoice fee items" placeholder="Search invoice fee items" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
                 {feeTypes.length ? (
                   <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Fee item</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>{feeTypes.filter((feeType) => `${feeType.title} ${feeType.status}`.toLowerCase().includes(search.trim().toLowerCase())).map((feeType) => (
                     <Fragment key={feeType.id}>
-                      <tr><td>{feeType.title}</td><td>{formatAmount(feeType.amount)}</td><td>{feeType.status}</td><td><TableAction action="edit" label="Edit fee item" onClick={() => { setEditFeeTitle(feeType.title); setEditFeeAmount(feeType.amount); setEditingFeeTypeId(feeType.id) }} />{feeType.status === 'active' ? <TableAction action="archive" label="Archive fee item" danger onClick={() => archiveFeeType(feeType)} disabled={busyKey === `fee-type-${feeType.id}`} /> : <TableAction action="restore" label="Restore fee item" onClick={() => restoreFeeType(feeType)} disabled={busyKey === `fee-type-${feeType.id}`} />}</td></tr>
-                      {editingFeeTypeId === feeType.id ? <tr><td colSpan="4"><form className="fee-type-edit-form" onSubmit={(event) => saveFeeType(event, feeType)}>
+                      <tr><td>{feeType.title}</td><td>{formatAmount(feeType.amount)}</td><td>{feeType.status}</td><td>{canManage ? <><TableAction action="edit" label="Edit fee item" onClick={() => { setEditFeeTitle(feeType.title); setEditFeeAmount(feeType.amount); setEditingFeeTypeId(feeType.id) }} />{feeType.status === 'active' ? <TableAction action="archive" label="Archive fee item" danger onClick={() => archiveFeeType(feeType)} disabled={busyKey === `fee-type-${feeType.id}`} /> : <TableAction action="restore" label="Restore fee item" onClick={() => restoreFeeType(feeType)} disabled={busyKey === `fee-type-${feeType.id}`} />}</> : null}</td></tr>
+                      {canManage && editingFeeTypeId === feeType.id ? <tr><td colSpan="4"><form className="fee-type-edit-form" onSubmit={(event) => saveFeeType(event, feeType)}>
                         <label htmlFor={`edit-fee-title-${feeType.id}`}>Fee item name</label><input id={`edit-fee-title-${feeType.id}`} value={editFeeTitle} onChange={(event) => setEditFeeTitle(event.target.value)} required />
                         <label htmlFor={`edit-fee-amount-${feeType.id}`}>Fee item amount</label><input id={`edit-fee-amount-${feeType.id}`} type="number" min="0.01" step="0.01" value={editFeeAmount} onChange={(event) => setEditFeeAmount(event.target.value)} required />
                         <button className="quiet-button" type="submit" disabled={busyKey === `fee-type-${feeType.id}`}>Save</button><button className="quiet-button" type="button" onClick={() => setEditingFeeTypeId(null)}>Cancel</button>
@@ -286,7 +286,7 @@ export default function FeeManagement({ school, expanded = false, standalone = f
               {(activeView === 'all' || activeView === 'invoices') ? <>
               <section aria-labelledby={`issue-fee-heading-${school.id}`}>
                 <div className="academic-section-heading"><h4 id={`issue-fee-heading-${school.id}`}>Issue a student invoice</h4></div>
-                <form className="fee-issue-form" onSubmit={issueInvoice}>
+                {canManage ? <form className="fee-issue-form" onSubmit={issueInvoice}>
                   <label htmlFor={`fee-student-${school.id}`}>Student</label>
                   <select id={`fee-student-${school.id}`} value={studentId} onChange={(event) => setStudentId(event.target.value)} required>
                     <option value="">Choose a student</option>
@@ -300,26 +300,26 @@ export default function FeeManagement({ school, expanded = false, standalone = f
                   <label htmlFor={`fee-due-date-${school.id}`}>Due date <span>(optional)</span></label>
                   <input id={`fee-due-date-${school.id}`} type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
                   <button className="primary-button small-button" type="submit" disabled={busyKey === 'issue' || !students.length || !feeTypes.some((feeType) => feeType.status === 'active')}>Issue invoice</button>
-                </form>
+                </form> : null}
                 {!students.length ? <p className="muted-copy">No active students are enrolled in {academicYear}.</p> : null}
               </section>
 
               <section aria-labelledby={`invoices-heading-${school.id}`}>
                 <div className="academic-section-heading"><h4 id={`invoices-heading-${school.id}`}>Student invoices</h4><span>{invoices.length}</span></div>
-                <DataTools title="Student invoices" rows={invoices.map((invoice) => ({ admission_number: invoice.student.admission_number, student: `${invoice.student.last_name}, ${invoice.student.first_name}`, fee_item: invoice.fee_type.title, academic_year: invoice.academic_year, amount: invoice.amount, amount_paid: invoice.amount_paid, balance: invoice.balance, due_date: invoice.due_date, status: invoice.status }))} fields={[{ key: 'admission_number', label: 'admission_number', required: true }, { key: 'fee_item', label: 'fee_item', required: true }, { key: 'due_date', label: 'due_date' }]} exportFields={[{ key: 'admission_number', label: 'admission_number' }, { key: 'student', label: 'student' }, { key: 'fee_item', label: 'fee_item' }, { key: 'academic_year', label: 'academic_year' }, { key: 'amount', label: 'amount' }, { key: 'amount_paid', label: 'amount_paid' }, { key: 'balance', label: 'balance' }, { key: 'due_date', label: 'due_date' }, { key: 'status', label: 'status' }]} canImport onImport={importInvoice} />
-                <DataTools title="Payment history" rows={invoices.flatMap((invoice) => invoice.payments.map((payment) => ({ invoice_id: invoice.id, admission_number: invoice.student.admission_number, student: `${invoice.student.last_name}, ${invoice.student.first_name}`, fee_item: invoice.fee_type.title, amount: payment.amount, paid_on: payment.paid_on, reference: payment.reference || '' })))} fields={[{ key: 'invoice_id', label: 'invoice_id', required: true }, { key: 'amount', label: 'amount', required: true }, { key: 'paid_on', label: 'paid_on', required: true }, { key: 'reference', label: 'reference', required: true }]} exportFields={[{ key: 'invoice_id', label: 'invoice_id' }, { key: 'admission_number', label: 'admission_number' }, { key: 'student', label: 'student' }, { key: 'fee_item', label: 'fee_item' }, { key: 'amount', label: 'amount' }, { key: 'paid_on', label: 'paid_on' }, { key: 'reference', label: 'reference' }]} canImport onImport={importPayment} />
+                <DataTools title="Student invoices" rows={invoices.map((invoice) => ({ admission_number: invoice.student.admission_number, student: `${invoice.student.last_name}, ${invoice.student.first_name}`, fee_item: invoice.fee_type.title, academic_year: invoice.academic_year, amount: invoice.amount, amount_paid: invoice.amount_paid, balance: invoice.balance, due_date: invoice.due_date, status: invoice.status }))} fields={[{ key: 'admission_number', label: 'admission_number', required: true }, { key: 'fee_item', label: 'fee_item', required: true }, { key: 'due_date', label: 'due_date' }]} exportFields={[{ key: 'admission_number', label: 'admission_number' }, { key: 'student', label: 'student' }, { key: 'fee_item', label: 'fee_item' }, { key: 'academic_year', label: 'academic_year' }, { key: 'amount', label: 'amount' }, { key: 'amount_paid', label: 'amount_paid' }, { key: 'balance', label: 'balance' }, { key: 'due_date', label: 'due_date' }, { key: 'status', label: 'status' }]} canImport={canManage} onImport={importInvoice} />
+                <DataTools title="Payment history" rows={invoices.flatMap((invoice) => invoice.payments.map((payment) => ({ invoice_id: invoice.id, admission_number: invoice.student.admission_number, student: `${invoice.student.last_name}, ${invoice.student.first_name}`, fee_item: invoice.fee_type.title, amount: payment.amount, paid_on: payment.paid_on, reference: payment.reference || '' })))} fields={[{ key: 'invoice_id', label: 'invoice_id', required: true }, { key: 'amount', label: 'amount', required: true }, { key: 'paid_on', label: 'paid_on', required: true }, { key: 'reference', label: 'reference', required: true }]} exportFields={[{ key: 'invoice_id', label: 'invoice_id' }, { key: 'admission_number', label: 'admission_number' }, { key: 'student', label: 'student' }, { key: 'fee_item', label: 'fee_item' }, { key: 'amount', label: 'amount' }, { key: 'paid_on', label: 'paid_on' }, { key: 'reference', label: 'reference' }]} canImport={canManage} onImport={importPayment} />
                 <label className="module-search table-search"><span aria-hidden="true">⌕</span><input aria-label="Search invoices" placeholder="Search student, invoice or status" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
                 {invoices.length ? (
                   <div className="crud-table-wrap"><table className="crud-table"><thead><tr><th>Student</th><th>Invoice</th><th>Record payment</th><th>Actions / history</th></tr></thead><tbody>
                     {visibleInvoices.map((invoice) => <tr key={invoice.id}>
                       <td>{invoice.student.last_name}, {invoice.student.first_name}<small>{invoice.student.admission_number}</small></td>
                       <td>{invoice.fee_type.title} · {invoice.status}<small>Amount {formatAmount(invoice.amount)} · Paid {formatAmount(invoice.amount_paid)} · Balance {formatAmount(invoice.balance)}{invoice.due_date ? ` · Due ${invoice.due_date}` : ''}</small></td>
-                      <td>{invoice.status !== 'void' && Number(invoice.balance) > 0 ? <form className="fee-payment-form" onSubmit={(event) => recordPayment(event, invoice)}>
+                      <td>{canManage && invoice.status !== 'void' && Number(invoice.balance) > 0 ? <form className="fee-payment-form" onSubmit={(event) => recordPayment(event, invoice)}>
                         <label className="visually-hidden" htmlFor={`payment-amount-${invoice.id}`}>Payment amount for invoice {invoice.id}</label><input id={`payment-amount-${invoice.id}`} type="number" min="0.01" max={invoice.balance} step="0.01" placeholder="Amount" value={payments[invoice.id]?.amount || ''} onChange={(event) => setPayments((current) => ({ ...current, [invoice.id]: { ...current[invoice.id], amount: event.target.value } }))} required />
                         <label className="visually-hidden" htmlFor={`payment-reference-${invoice.id}`}>Payment reference for invoice {invoice.id}</label><input id={`payment-reference-${invoice.id}`} placeholder="Receipt reference (optional)" value={payments[invoice.id]?.reference || ''} onChange={(event) => setPayments((current) => ({ ...current, [invoice.id]: { ...current[invoice.id], reference: event.target.value } }))} />
                         <button className="primary-button small-button" type="submit" disabled={busyKey === `payment-${invoice.id}`}>Record payment</button>
                       </form> : '—'}</td>
-                      <td>{invoice.status !== 'void' && invoice.amount_paid === '0.00' ? <TableAction action="delete" label="Void invoice" danger onClick={() => voidInvoice(invoice)} disabled={busyKey === `invoice-${invoice.id}`} /> : null}{invoice.payments.length ? <details className="fee-payment-history"><summary>Payments ({invoice.payments.length})</summary><ul>{invoice.payments.map((payment) => <li key={payment.id}>{formatAmount(payment.amount)} · {payment.paid_on}{payment.reference ? ` · ${payment.reference}` : ''}</li>)}</ul></details> : null}</td>
+                      <td>{canManage && invoice.status !== 'void' && invoice.amount_paid === '0.00' ? <TableAction action="delete" label="Void invoice" danger onClick={() => voidInvoice(invoice)} disabled={busyKey === `invoice-${invoice.id}`} /> : null}{invoice.payments.length ? <details className="fee-payment-history"><summary>Payments ({invoice.payments.length})</summary><ul>{invoice.payments.map((payment) => <li key={payment.id}>{formatAmount(payment.amount)} · {payment.paid_on}{payment.reference ? ` · ${payment.reference}` : ''}</li>)}</ul></details> : null}</td>
                     </tr>)}
                   </tbody></table></div>
                 ) : <p className="muted-copy">No invoices for {academicYear} yet.</p>}

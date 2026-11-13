@@ -10,6 +10,8 @@ import StaffManagement from './StaffManagement.jsx'
 import GuardianManagement from './GuardianManagement.jsx'
 import StudentInquiries from './StudentInquiries.jsx'
 import DataTools from './DataTools.jsx'
+import UserManagement from './UserManagement.jsx'
+import SchoolRoles from './SchoolRoles.jsx'
 
 async function readData(response) {
   const result = await response.json().catch(() => ({}))
@@ -21,16 +23,26 @@ async function readData(response) {
 }
 
 function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange, onNavigate, onStartAdmission, activeStudentId, onOpenStudent, onCloseStudent, admissionSeed, onAdmissionComplete, onAdmissionCancel, activeModule = 'schools' }) {
-  const canManageUsers = user.is_super_admin || school.role === 'school_admin'
-  const canTakeAttendance = user.is_super_admin || ['school_admin', 'teacher'].includes(school.role)
+  const schoolPermissions = new Set(school.permissions || [])
+  const hasPermission = (permission) => user.is_super_admin || schoolPermissions.has(permission)
+  const canManageUsers = hasPermission('users.manage')
+  const canManageStudents = hasPermission('students.manage')
+  const canTakeAttendance = hasPermission('attendance.manage')
+  const canManageGuardians = hasPermission('guardians.manage')
+  const canManageAcademics = hasPermission('academics.manage')
+  const canManageStaff = hasPermission('staff.manage')
+  const canManageFees = hasPermission('fees.manage')
+  const canManageExpenses = hasPermission('expenses.manage')
+  const canManageRoles = hasPermission('roles.manage')
   const [editing, setEditing] = useState(false)
   const [teamOpen, setTeamOpen] = useState(false)
   const [members, setMembers] = useState([])
+  const [schoolRoles, setSchoolRoles] = useState([])
   const [name, setName] = useState(school.name)
   const [slug, setSlug] = useState(school.slug)
   const [editStatus, setEditStatus] = useState(school.status)
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState(user.is_super_admin ? 'school_admin' : 'teacher')
+  const [role, setRole] = useState('teacher')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -39,7 +51,12 @@ function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange
       setBusy(true)
       setError('')
       try {
-        setMembers(await readData(await apiRequest(`/api/schools/${school.id}/users`)))
+        const [memberData, roleData] = await Promise.all([
+          apiRequest(`/api/schools/${school.id}/users`).then(readData),
+          apiRequest(`/api/schools/${school.id}/roles`).then(readData),
+        ])
+        setMembers(memberData)
+        setSchoolRoles(roleData.roles)
       } catch (requestError) {
         setError(requestError.message)
       } finally {
@@ -186,17 +203,14 @@ function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange
                       <div className="team-person">
                         <strong>{member.name}</strong><span>{member.email}</span>
                       </div>
-                      {user.is_super_admin ? (
-                        <select aria-label={`Role for ${member.name}`} value={member.role} onChange={(event) => updateMember(member, { role: event.target.value })}>
-                          <option value="school_admin">School admin</option>
-                          <option value="teacher">Teacher</option>
-                        </select>
-                      ) : <span className="role-pill">{member.role.replace('_', ' ')}</span>}
+                      {member.is_super_admin ? <span className="role-pill">Super Admin · immutable</span> : <select aria-label={`Role for ${member.name}`} value={member.role} onChange={(event) => updateMember(member, { role: event.target.value })}>
+                        {schoolRoles.filter((item) => item.team_id === school.id).map((item) => <option key={item.id} value={item.name}>{item.name.replaceAll('-', ' ')}</option>)}
+                      </select>}
                       <label className="active-toggle">
-                        <input type="checkbox" checked={member.is_active} onChange={(event) => updateMember(member, { is_active: event.target.checked })} />
+                        <input type="checkbox" checked={member.is_active} disabled={member.is_super_admin} onChange={(event) => updateMember(member, { is_active: event.target.checked })} />
                         Active
                       </label>
-                      <button className="quiet-button danger-action" type="button" onClick={() => removeMember(member)}>Remove</button>
+                      <button className="quiet-button danger-action" type="button" disabled={member.is_super_admin} onClick={() => removeMember(member)}>Remove</button>
                     </li>
                   ))}
                 </ul>
@@ -206,12 +220,7 @@ function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange
                 <label htmlFor={`member-email-${school.id}`}>Add an existing account by email</label>
                 <div className="member-form-row">
                   <input id={`member-email-${school.id}`} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="person@school.edu" required />
-                  {user.is_super_admin ? (
-                    <select aria-label="New member role" value={role} onChange={(event) => setRole(event.target.value)}>
-                      <option value="school_admin">School admin</option>
-                      <option value="teacher">Teacher</option>
-                    </select>
-                  ) : null}
+                  <select aria-label="New member role" value={role} onChange={(event) => setRole(event.target.value)}>{schoolRoles.filter((item) => item.team_id === school.id).map((item) => <option key={item.id} value={item.name}>{item.name.replaceAll('-', ' ')}</option>)}</select>
                   <button className="primary-button small-button" type="submit" disabled={busy}>Add</button>
                 </div>
               </form>
@@ -220,16 +229,17 @@ function SchoolCard({ school, user, onUpdated, onArchived, onActiveSessionChange
         </>
       ) : null}
 
-      {activeModule.startsWith('academic-') && activeModule !== 'academic-years' ? <AcademicStructure school={school} canManage={canManageUsers} expanded standalone activeSection={activeModule.replace('academic-', '')} /> : null}
-      {activeModule === 'academic-years' ? <SchoolSessions school={school} canManage={canManageUsers} onCurrentChange={onActiveSessionChange} /> : null}
-      {activeModule.startsWith('staff-') ? <StaffManagement school={school} canManage={canManageUsers} activeView={activeModule} onNavigate={onNavigate} /> : null}
-      {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded standalone selectedStudentId={activeStudentId} onOpenStudent={onOpenStudent} onCloseStudent={onCloseStudent} onNavigate={onNavigate} admissionSeed={admissionSeed} onAdmissionComplete={onAdmissionComplete} onAdmissionCancel={onAdmissionCancel} /> : null}
-      {activeModule === 'student-inquiries' ? <StudentInquiries school={school} canManage={canManageUsers} onStartAdmission={onStartAdmission} /> : null}
-      {activeModule === 'guardians' ? <GuardianManagement school={school} canManage={canManageUsers} onNavigate={onNavigate} onOpenStudent={onOpenStudent} /> : null}
-      {activeModule === 'attendance' ? <StudentRoster school={school} canManage={canManageUsers} canTakeAttendance={canTakeAttendance} expanded attendanceOnly standalone /> : null}
-      {['fees-catalog', 'fees-discounts', 'fees-groups', 'fees-masters'].includes(activeModule) && canManageUsers ? <FeeSetup school={school} activeSection={activeModule.replace('fees-', '') === 'catalog' ? 'fee-types' : activeModule.replace('fees-', '')} /> : null}
-      {['fee-items', 'invoices'].includes(activeModule) && canManageUsers ? <FeeManagement school={school} expanded standalone activeView={activeModule} /> : null}
-      {activeModule.startsWith('expense-') && canManageUsers ? <ExpenseManagement school={school} activeView={activeModule} /> : null}
+      {activeModule.startsWith('academic-') && activeModule !== 'academic-years' ? <AcademicStructure school={school} canManage={canManageAcademics} expanded standalone activeSection={activeModule.replace('academic-', '')} /> : null}
+      {activeModule === 'academic-years' ? <SchoolSessions school={school} canManage={canManageAcademics} onCurrentChange={onActiveSessionChange} /> : null}
+      {activeModule.startsWith('staff-') ? <StaffManagement school={school} canManage={canManageStaff} activeView={activeModule} onNavigate={onNavigate} /> : null}
+      {activeModule === 'students' ? <StudentRoster school={school} canManage={canManageStudents} canTakeAttendance={canTakeAttendance} expanded standalone selectedStudentId={activeStudentId} onOpenStudent={onOpenStudent} onCloseStudent={onCloseStudent} onNavigate={onNavigate} admissionSeed={admissionSeed} onAdmissionComplete={onAdmissionComplete} onAdmissionCancel={onAdmissionCancel} /> : null}
+      {activeModule === 'student-inquiries' ? <StudentInquiries school={school} canManage={hasPermission('inquiries.manage')} onStartAdmission={onStartAdmission} /> : null}
+      {activeModule === 'guardians' ? <GuardianManagement school={school} canManage={canManageGuardians} onNavigate={onNavigate} onOpenStudent={onOpenStudent} /> : null}
+      {activeModule === 'attendance' ? <StudentRoster school={school} canManage={canTakeAttendance} canTakeAttendance={canTakeAttendance} expanded attendanceOnly standalone /> : null}
+      {['fees-catalog', 'fees-discounts', 'fees-groups', 'fees-masters'].includes(activeModule) && hasPermission('fees.view') ? <FeeSetup school={school} activeSection={activeModule.replace('fees-', '') === 'catalog' ? 'fee-types' : activeModule.replace('fees-', '')} canManage={canManageFees} /> : null}
+      {['fee-items', 'invoices'].includes(activeModule) && hasPermission('fees.view') ? <FeeManagement school={school} expanded standalone activeView={activeModule} canManage={canManageFees} /> : null}
+      {activeModule.startsWith('expense-') && hasPermission('expenses.view') ? <ExpenseManagement school={school} activeView={activeModule} canManage={canManageExpenses} /> : null}
+      {activeModule === 'roles' ? <SchoolRoles school={school} /> : null}
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
     </article>
@@ -355,7 +365,8 @@ export default function SchoolWorkspace({ user, onLogout }) {
 
   async function changeActiveSession(event) {
     const sessionId = event.target.value
-    if (!sessionId || !activeSchoolId || !canManageSchool) return
+    const canChangeSession = user.is_super_admin || schools.find((school) => String(school.id) === activeSchoolId)?.permissions?.includes('academics.manage')
+    if (!sessionId || !activeSchoolId || !canChangeSession) return
     setSessionBusy(true)
     setSessionError('')
     try {
@@ -373,7 +384,9 @@ export default function SchoolWorkspace({ user, onLogout }) {
   }
 
   const activeSchool = schools.find((school) => String(school.id) === activeSchoolId)
-  const canManageSchool = user.is_super_admin || activeSchool?.role === 'school_admin'
+  const activePermissions = new Set(activeSchool?.permissions || [])
+  const can = (permission) => user.is_super_admin || activePermissions.has(permission)
+  const canManageAcademics = can('academics.manage')
   const navGroups = [
     { title: 'GENERAL', items: [['overview', '▦', 'Overview'], ['schools', '⌂', 'Schools']] },
     { title: 'STUDENTS', items: [['students', '♧', 'Students'], ['student-inquiries', '▣', 'Inquiries & admissions'], ['attendance', '✓', 'Attendance']] },
@@ -381,12 +394,21 @@ export default function SchoolWorkspace({ user, onLogout }) {
     { title: 'ACADEMICS', items: [['academic-sections', '▤', 'Sections'], ['academic-grades', '▤', 'Grades'], ['academic-subjects', '◈', 'Subjects'], ['academic-years', '◷', 'Academic years']] },
     { title: 'FINANCE', items: [['fees-catalog', '＄', 'Fee catalog'], ['fees-discounts', '%', 'Discounts'], ['fees-groups', '▣', 'Fee groups'], ['fees-masters', '▤', 'Fee masters'], ['fee-items', '＋', 'Invoice fee items'], ['invoices', '▧', 'Invoices & payments'], ['expense-heads', '▤', 'Expense heads'], ['expense-add', '＋', 'Add expense'], ['expense-search', '⌕', 'Search expenses']] },
     { title: 'PEOPLE', items: [['staff-directory', '♙', 'Staff'], ['staff-create', '＋', 'Add staff'], ['staff-designations', '◇', 'Designations'], ['staff-departments', '▥', 'Departments'], ['staff-leave-types', '◷', 'Leave types']] },
+    { title: 'ACCESS', items: [['roles', '♢', 'Roles & permissions'], ...(user.is_super_admin ? [['users', '♟', 'User accounts']] : [])] },
   ].map((group) => ({
     ...group,
     items: group.items.filter(([key]) => {
-      if (key.startsWith('fees-') || key === 'fee-items' || key === 'invoices' || key.startsWith('expense-')) return canManageSchool
-      if (key === 'student-inquiries') return canManageSchool
-      if (['staff-create', 'staff-designations', 'staff-departments', 'staff-leave-types'].includes(key)) return canManageSchool
+      if (key === 'students') return can('students.view') || can('students.manage')
+      if (key === 'student-inquiries') return can('inquiries.view') || can('inquiries.manage')
+      if (key === 'attendance') return can('attendance.view') || can('attendance.manage')
+      if (key === 'guardians') return can('guardians.view') || can('guardians.manage')
+      if (key.startsWith('academic-')) return can('academics.view') || can('academics.manage')
+      if (key.startsWith('fees-') || key === 'fee-items' || key === 'invoices') return can('fees.view') || can('fees.manage')
+      if (key.startsWith('expense-')) return can('expenses.view') || can('expenses.manage')
+      if (key === 'staff-directory') return can('staff.view') || can('staff.manage')
+      if (['staff-create', 'staff-designations', 'staff-departments', 'staff-leave-types'].includes(key)) return can('staff.manage')
+      if (key === 'roles') return can('roles.manage')
+      if (key === 'users') return user.is_super_admin
       return true
     }),
   })).filter((group) => group.items.length)
@@ -399,7 +421,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
         <a className="dashboard-brand" href="#account-title"><span className="dashboard-brand-mark">S</span><span>Schoolhouse<small>ADMIN CONSOLE</small></span></a>
         {activeSchool ? <div className="sidebar-session-switcher">
           <span className="sidebar-session-caption">Current session</span>
-          {canManageSchool ? <select aria-label="Current session" value={activeSchool.active_session?.id || ''} onChange={changeActiveSession} disabled={sessionBusy || sidebarSessions.length === 0}>
+          {canManageAcademics ? <select aria-label="Current session" value={activeSchool.active_session?.id || ''} onChange={changeActiveSession} disabled={sessionBusy || sidebarSessions.length === 0}>
             {!activeSchool.active_session ? <option value="">No active session</option> : null}
             {sidebarSessions.filter((session) => session.status === 'active').map((session) => <option key={session.id} value={session.id}>{session.title}</option>)}
           </select> : <strong>{activeSchool.active_session?.title || 'No active session'}</strong>}
@@ -417,13 +439,12 @@ export default function SchoolWorkspace({ user, onLogout }) {
             ))}
           </div>)}
         </nav>
-        <div className="sidebar-user"><span className="user-avatar">{user.name.slice(0, 1).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.is_super_admin ? 'Platform admin' : 'School account'}</small></span></div>
       </aside>
       <div className="dashboard-main">
       <div className="dashboard-topbar">
         <div className="breadcrumb">Workspace <span>/</span> <strong>{activeModuleLabel}</strong></div>
         <div className="topbar-controls">
-          {activeModule !== 'overview' && activeModule !== 'schools' && schools.length ? <label className="school-picker">School<select aria-label="Selected school" value={activeSchoolId} onChange={(event) => setSelectedSchoolId(event.target.value)}>{schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select></label> : null}
+          {activeModule !== 'users' && schools.length ? <label className="school-picker">School<select aria-label="Selected school" value={activeSchoolId} onChange={(event) => setSelectedSchoolId(event.target.value)}>{schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select></label> : null}
           <div className="topbar-user"><span className="user-avatar">{user.name.slice(0, 1).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.email}</small></span><button className="secondary-button" type="button" onClick={onLogout}>Sign out</button></div>
         </div>
       </div>
@@ -431,7 +452,7 @@ export default function SchoolWorkspace({ user, onLogout }) {
         <div>
           <p className="eyebrow">{activeModule === 'overview' ? (user.is_super_admin ? 'PLATFORM OVERVIEW' : 'SCHOOL OVERVIEW') : 'SCHOOL MANAGEMENT'}</p>
           <h1 id="account-title">{activeModule === 'overview' ? `Good to see you, ${user.name.split(' ')[0]}.` : activeModuleLabel}</h1>
-          <p className="intro">{activeModule === 'overview' ? 'Here’s what’s happening across your school workspace.' : `Manage ${activeModuleLabel.toLowerCase()} for ${activeSchool?.name || 'your school'}.`}</p>
+          <p className="intro">{activeModule === 'overview' ? 'Here’s what’s happening across your school workspace.' : activeModule === 'users' ? 'Manage platform accounts and global access.' : `Manage ${activeModuleLabel.toLowerCase()} for ${activeSchool?.name || 'your school'}.`}</p>
         </div>
       </div>
 
@@ -484,7 +505,8 @@ export default function SchoolWorkspace({ user, onLogout }) {
           ))}
         </div>
       </div> : null}
-      {activeModule !== 'overview' && activeModule !== 'schools' ? (
+      {activeModule === 'users' && user.is_super_admin ? <div className="active-module-page"><UserManagement /></div> : null}
+      {activeModule !== 'overview' && activeModule !== 'schools' && activeModule !== 'users' ? (
         schools.find((school) => String(school.id) === activeSchoolId)
           ? <div className="active-module-page"><SchoolCard key={`${activeSchoolId}-${activeModule}-${activeSchool?.active_session?.id || 'no-session'}`} school={schools.find((school) => String(school.id) === activeSchoolId)} user={user} onUpdated={updateSchool} onActiveSessionChange={(session) => applyCurrentSession(activeSchoolId, session)} onArchived={(id) => { setSchools((current) => current.filter((item) => item.id !== id)); setActiveModule('schools') }} onNavigate={(module) => { setActiveStudentId(null); setActiveModule(module) }} onStartAdmission={startInquiryAdmission} activeModule={activeModule} activeStudentId={activeStudentId} admissionSeed={admissionSeed} onAdmissionComplete={completeInquiryAdmission} onAdmissionCancel={() => setAdmissionSeed(null)} onOpenStudent={(student) => student && setActiveStudentId(student.id)} onCloseStudent={() => setActiveStudentId(null)} /></div>
           : <p className="empty-memberships">{loading ? 'Loading schools…' : 'Add or select a school to open this module.'}</p>

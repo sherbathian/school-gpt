@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\School;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -23,7 +24,7 @@ class SchoolController extends Controller
         return response()->json([
             'data' => $schools->with(['schoolSessions' => fn ($query) => $query->where('is_current', true)])
                 ->orderBy('schools.name')->get(['schools.id', 'schools.name', 'schools.slug', 'schools.status'])
-                ->map(fn (School $school) => $this->schoolData($school, $request->user()->isSuperAdmin()))
+                ->map(fn (School $school) => $this->schoolData($school, $request->user()))
                 ->values(),
         ]);
     }
@@ -37,7 +38,7 @@ class SchoolController extends Controller
         $record = $schoolQuery->whereKey($school)->firstOrFail();
         Gate::authorize('view', $record);
 
-        return response()->json(['data' => $this->schoolData($record, $request->user()->isSuperAdmin())]);
+        return response()->json(['data' => $this->schoolData($record, $request->user())]);
     }
 
     public function store(Request $request): JsonResponse
@@ -63,7 +64,7 @@ class SchoolController extends Controller
             'status' => $validated['status'] ?? 'active',
         ]);
 
-        return response()->json(['data' => $this->schoolData($school, true)], 201);
+        return response()->json(['data' => $this->schoolData($school, $request->user())], 201);
     }
 
     public function update(Request $request, int $school): JsonResponse
@@ -79,7 +80,7 @@ class SchoolController extends Controller
 
         $record->update($validated);
 
-        return response()->json(['data' => $this->schoolData($record, true)]);
+        return response()->json(['data' => $this->schoolData($record, $request->user())]);
     }
 
     public function destroy(Request $request, int $school): JsonResponse
@@ -92,14 +93,15 @@ class SchoolController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function schoolData(School $school, bool $isSuperAdmin): array
+    private function schoolData(School $school, User $user): array
     {
         return [
             'id' => $school->id,
             'name' => $school->name,
             'slug' => $school->slug,
             'status' => $school->status,
-            'role' => $isSuperAdmin ? 'super_admin' : $school->pivot->role,
+            'role' => $user->isSuperAdmin() ? 'super_admin' : $school->pivot->role,
+            'permissions' => $user->permissionsForSchool($school),
             'active_session' => ($session = $school->schoolSessions->first()) ? [
                 'id' => $session->id,
                 'title' => $session->title,

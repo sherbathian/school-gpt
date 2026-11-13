@@ -20,7 +20,7 @@ class StaffController extends Controller
         $schoolRecord = $this->accessibleSchool($request, $school, 'view');
         $staff = $schoolRecord->staff()->with(['designation:id,title', 'department:id,title'])->orderBy('last_name')->orderBy('first_name')->get();
 
-        return response()->json(['data' => $staff->map(fn (Staff $person) => $this->staffData($person, $request->user()->canManageSchool($schoolRecord)))->values()]);
+        return response()->json(['data' => $staff->map(fn (Staff $person) => $this->staffData($person, $request->user()->hasSchoolPermission($schoolRecord, 'staff.manage')))->values()]);
     }
 
     public function store(Request $request, int $school): JsonResponse
@@ -41,7 +41,7 @@ class StaffController extends Controller
         $schoolRecord = $this->accessibleSchool($request, $school, 'view');
         $person = $schoolRecord->staff()->with(['designation:id,title', 'department:id,title'])->findOrFail($staff);
 
-        return response()->json(['data' => $this->staffData($person, $request->user()->canManageSchool($schoolRecord))]);
+        return response()->json(['data' => $this->staffData($person, $request->user()->hasSchoolPermission($schoolRecord, 'staff.manage'))]);
     }
 
     public function update(Request $request, int $school, int $staff): JsonResponse

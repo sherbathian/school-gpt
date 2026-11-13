@@ -24,7 +24,7 @@ class SchoolPolicy
 
     public function manage(User $user, School $school): bool
     {
-        return $user->canManageSchool($school);
+        return $user->hasAnySchoolManagementPermission($school);
     }
 
     public function recordAttendance(User $user, School $school): bool
@@ -44,7 +44,7 @@ class SchoolPolicy
 
     public function manageUsers(User $user, School $school): bool
     {
-        return $user->isSuperAdmin() || $user->canManageSchool($school);
+        return $user->hasSchoolPermission($school, 'users.manage');
     }
 
     public function manageMember(User $user, School $school, User $member): bool
@@ -53,10 +53,10 @@ class SchoolPolicy
             return true;
         }
 
-        return $user->canManageSchool($school)
+        return $user->hasSchoolPermission($school, 'users.manage')
+            && ! $member->isSuperAdmin()
             && $school->users()
                 ->whereKey($member->id)
-                ->wherePivot('role', 'teacher')
                 ->exists();
     }
 }

@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -21,7 +22,9 @@ class AuthController extends Controller
         $remember = $credentials['remember'] ?? false;
         unset($credentials['remember']);
 
-        if (! Auth::guard('web')->attempt($credentials, $remember)) {
+        $user = User::query()->where('email', $credentials['email'])->first();
+
+        if (! $user || ! $user->is_active || ! Hash::check($credentials['password'], $user->password) || ! Auth::guard('web')->attempt($credentials, $remember)) {
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
@@ -55,6 +58,7 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'is_super_admin' => $user->isSuperAdmin(),
+            'roles' => $user->getRoleNames()->values(),
             'schools' => $user->activeSchools()
                 ->orderBy('schools.name')
                 ->get(['schools.id', 'schools.name', 'schools.slug'])

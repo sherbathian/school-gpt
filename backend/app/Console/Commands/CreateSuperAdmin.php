@@ -13,6 +13,7 @@ class CreateSuperAdmin extends Command
 
     public function handle(): int
     {
+        setPermissionsTeamId(0);
         $email = strtolower(trim((string) $this->ask('Email address')));
 
         if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -31,6 +32,7 @@ class CreateSuperAdmin extends Command
             }
 
             $user->forceFill(['is_super_admin' => true])->save();
+            $user->syncRoles(['super-admin']);
             $this->info("Global administrator access granted to {$email}.");
 
             return self::SUCCESS;
@@ -52,6 +54,7 @@ class CreateSuperAdmin extends Command
             'password' => $password,
         ]);
         $user->forceFill(['is_super_admin' => true])->save();
+        $user->syncRoles(['super-admin']);
 
         $this->info("Global administrator account created for {$email}.");
 

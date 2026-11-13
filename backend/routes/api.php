@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\FeeTypeController;
 use App\Http\Controllers\Api\GradeController;
 use App\Http\Controllers\Api\GuardianController;
 use App\Http\Controllers\Api\LegacyFeeTypeController;
+use App\Http\Controllers\Api\SchoolRoleController;
 use App\Http\Controllers\Api\SchoolSessionController;
 use App\Http\Controllers\Api\SectionController;
 use App\Http\Controllers\Api\StaffController;
@@ -17,19 +18,26 @@ use App\Http\Controllers\Api\StaffLookupController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\StudentInquiryController;
 use App\Http\Controllers\Api\SubjectController;
+use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\SchoolUserController;
+use App\Http\Middleware\RequireSchoolPermission;
+use App\Http\Middleware\ResolveSchoolPermissionTeam;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:6,1');
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', ResolveSchoolPermissionTeam::class, RequireSchoolPermission::class])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/users', [UserController::class, 'index']);
+    Route::post('/users', [UserController::class, 'store']);
+    Route::patch('/users/{user}', [UserController::class, 'update']);
+    Route::delete('/users/{user}', [UserController::class, 'destroy']);
     Route::get('/schools', [SchoolController::class, 'index']);
     Route::post('/schools', [SchoolController::class, 'store']);
     Route::get('/schools/{school}', [SchoolController::class, 'show']);
@@ -39,6 +47,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/schools/{school}/users', [SchoolUserController::class, 'store']);
     Route::patch('/schools/{school}/users/{user}', [SchoolUserController::class, 'update']);
     Route::delete('/schools/{school}/users/{user}', [SchoolUserController::class, 'destroy']);
+    Route::get('/schools/{school}/roles', [SchoolRoleController::class, 'index']);
+    Route::post('/schools/{school}/roles', [SchoolRoleController::class, 'store']);
+    Route::patch('/schools/{school}/roles/{role}', [SchoolRoleController::class, 'update']);
+    Route::delete('/schools/{school}/roles/{role}', [SchoolRoleController::class, 'destroy']);
     Route::apiResource('schools.grades', GradeController::class);
     Route::apiResource('schools.sessions', SchoolSessionController::class);
     Route::apiResource('schools.fee-discounts', FeeDiscountController::class);
